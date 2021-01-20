@@ -1,4 +1,4 @@
-function [optThresh,segment] = slidingThreshold(image2segment,step,UPthresh,SMf,shiftHM_flag)
+function [optThresh,segment] = slidingThreshold(image2segment,step,UPthresh,SMf,shiftHM_flag,medFilt_flag)
 %SLIDINGTHRESHOLD: Performs sliding threshold segmentation on input image 
 %   Step 1: Remove noise by applying median filter
 %   Step 2: Sum all active pixels in binary mask for every threshold in x
@@ -9,8 +9,13 @@ function [optThresh,segment] = slidingThreshold(image2segment,step,UPthresh,SMf,
 %       Used by: loadpcvipr.m, paramMap_params_new.m
 %       Dependencies: NONE
 
-CDcrop = medfilt3(image2segment); %removes noise on surface of vessels
-maxVal = max(CDcrop(:));
+if medFilt_flag
+    CDcrop = medfilt3(image2segment); %removes noise on surface of vessels
+    maxVal = max(CDcrop(:));
+else
+    CDcrop = image2segment;
+    maxVal = max(CDcrop(:));
+end 
 
 x = 0:step:UPthresh; %array of all possible thresholds
 Sval = zeros(size(x),'single');
@@ -27,15 +32,14 @@ y = conv(Sval,ones(SMf,1),'same')./SMf; %convolve w/ mean filter (size SMf)
 y = y./max(y); 
 
 % Calculate max curvature of sliding-threshold curve
-dx  = gradient(x);  %1st derivative
-ddx = gradient(dx); %2nd derivative
+dx  = gradient(x);  %1st derivative, note that 2nd derivative=0
 dy  = gradient(y);  
 ddy = gradient(dy); 
-num   = dx.*ddy - ddx.*dy;
+num   = dx.*ddy;
 denom = dx.*dx + dy.*dy; 
 curvatureSM = num ./ (sqrt(denom)).^3; %calculate curvature
 curvatureSM(curvatureSM < 0) = 0; %throw negative curvatures out
-%curvatureSM = conv(curvatureSM,ones(SMf,1),'same')./SMf; %smooth out curvature plot
+curvatureSM = conv(curvatureSM,ones(SMf,1),'same')./SMf; %smooth out curvature plot
 [~,Idx] = max(curvatureSM); %get index of max curvature
 
 if shiftHM_flag

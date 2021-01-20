@@ -1,4 +1,4 @@
-function v = load_dat(name, res)
+function v = load_dat(name, matrix)
 %LOAD_DAT: Loads dat files in current directory.
 %   
 %   Used by: loadpcvipr.m
@@ -10,7 +10,7 @@ if fid < 0  % If name does not exist in directory
 end
 
 % Reads in as short, reshapes by image resolution (i.e. 320x320x320)
-v = reshape(fread(fid,'short=>single'),res);
+v = reshape(fread(fid,'short=>single'),matrix);
 fclose(fid);
 
 return

@@ -9,5 +9,5 @@ idx = find(Vmag > Venc); %find where flow velocity > VENC.
 Vmag(idx) = Venc; %cap Vmag at VENC
 
 %Create complex-difference angiogram
-angio = 32000*MAG.*sin( (pi/2*Vmag) / Venc); %32000 is max MAG value
+angio = MAG.*sin( (pi/2*Vmag) / Venc);
 return

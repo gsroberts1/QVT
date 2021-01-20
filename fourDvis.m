@@ -51,15 +51,14 @@ function fourDvis_OpeningFcn(hObject, eventdata, handles, varargin)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 % varargin   command line arguments to fourDvis (see VARARGIN)
-global PlanesVis branchListVis segmentVis directory fov res
+global PlanesVis branchListVis segmentVis directory res caseFilePath
 global pVis figVis dcm_obj_vis
 
 PlanesVis = varargin{1}; %corners for all planes
 branchListVis = varargin{2}; %locations/labels for all vessel points
 segmentVis = varargin{3}; %segmentation mask
-directory = varargin{4}; %home directory
-fov = varargin{5}; %field of view (cm)
-res = varargin{6}; %original matrix size
+caseFilePath = varargin{4}; %directory of pcviprData file (imageData)
+res = varargin{5}; %pixel resolution (mm)
 pVis = []; %here to remove warning, used in myupdatefcn
 
 % Choose default command line output for fourDvis
@@ -70,48 +69,18 @@ guidata(hObject, handles);
 
 
 %%% Loading Data
-MAG = load_dat(fullfile(directory,'MAG.dat'),[res res res]);
-CD = load_dat(fullfile(directory,'CD.dat'),[res res res]);
-vMean(:,:,:,1) = load_dat(fullfile(directory,'comp_vd_1.dat'),[res res res])*.1;
-vMean(:,:,:,2) = load_dat(fullfile(directory,'comp_vd_2.dat'),[res res res])*.1;
-vMean(:,:,:,3) = load_dat(fullfile(directory,'comp_vd_3.dat'),[res res res])*.1;
-
-
-%%% Crop data
-SUMnumA = squeeze(sum(sum(MAG,1),2)); %1D axial projection
-SUMnumS = squeeze(sum(sum(MAG,1),3))'; %1D sagittal projection
-SUMnumC = squeeze(sum(sum(MAG,2),3)); %1D coronal projection
-
-SUMnumA(1:3) = 0; SUMnumA(end-2:end) = 0; %Chop off edges of projections 
-SUMnumS(1:3) = 0; SUMnumS(end-2:end) = 0; %(usually noisy data)
-SUMnumC(1:3) = 0; SUMnumC(end-2:end) = 0;
-
-SUMnum = [SUMnumC,SUMnumS,SUMnumA]; % Combine projections and normalize
-SUMnum = rescale(SUMnum,'InputMin',min(SUMnum),'InputMax',max(SUMnum));
-
-% Find where projection crosses normalized threshold value of 0.25 
-BIN = SUMnum>0.25;
-[~,IDXstart] = max(BIN,[],1); %get first thresh crossing
-[~,IDXend] = max(flipud(BIN),[],1); 
-IDXend = size(MAG) - IDXend + 1; %get last thresh crossing
-
-% Crop data with new dimensions
-MAG = MAG(IDXstart(1):IDXend(1),IDXstart(2):IDXend(2),IDXstart(3):IDXend(3));
-CD = CD(IDXstart(1):IDXend(1),IDXstart(2):IDXend(2),IDXstart(3):IDXend(3));
-vMean = vMean(IDXstart(1):IDXend(1),IDXstart(2):IDXend(2),IDXstart(3):IDXend(3),:);
-newDIM = size(MAG);
-
+load(caseFilePath,'imageData') %load data_struct
 
 %%% Save all data in handles structure
-handles.MAG = MAG;
-handles.CD = CD;
-handles.U = vMean(:,:,:,1); 
-handles.V = vMean(:,:,:,2);
-handles.W = vMean(:,:,:,3);
-handles.res = newDIM; %new matrix sizes (after cropping)
-handles.MIMICS.delX = fov*10/res; %pixel size for mimics masks
-handles.MIMICS.delY = fov*10/res;
-handles.MIMICS.delZ = fov*10/res;
+handles.MAG = imageData.MAG;
+handles.CD = imageData.CD;
+handles.U = imageData.V(:,:,:,1); 
+handles.V = imageData.V(:,:,:,2); 
+handles.W = imageData.V(:,:,:,3); 
+handles.res = size(imageData.MAG); %new matrix sizes (after cropping)
+handles.MIMICS.delX = res; %pixel size for mimics masks
+handles.MIMICS.delY = res;
+handles.MIMICS.delZ = res;
 handles.MaskID_struct(1).IDX = find(segmentVis); %index active pixels
 handles.MaskID_struct(1).branchListVis = branchListVis';
 handles.MaskID_struct(1).PlanesVis = PlanesVis;
@@ -122,15 +91,16 @@ handles.MaskID_struct(1).ISOvar.alpha = 1; %isosurface transparency
 handles.MaskID_struct(1).ISOvar.colorval = 1; %color value (in list)
 handles.MaskID_struct(1).ISOvar.smoothval = 1; %smooth value (in list)
 
+clear imageData
 
 %%% Create magnitude image planes for slice visualizations
 figVis = figure('CloseRequestFcn',@my_closereq); %open second figure
 
-[X,Y,Z] = meshgrid(1:newDIM(2),1:newDIM(1),1:newDIM(3)); 
+[X,Y,Z] = meshgrid(1:size(handles.MAG,2),1:size(handles.MAG,1),1:size(handles.MAG,3)); 
 hold on     
-hsurfacesy = slice(X,Y,Z,MAG,[],1,[]); %add planes to images
-hsurfacesx = slice(X,Y,Z,MAG,1,[],[]);
-hsurfacesz = slice(X,Y,Z,MAG,[],[],1);
+hsurfacesy = slice(X,Y,Z,handles.MAG,[],1,[]); %add planes to images
+hsurfacesx = slice(X,Y,Z,handles.MAG,1,[],[]);
+hsurfacesz = slice(X,Y,Z,handles.MAG,[],[],1);
 
 % Turn slice visualization off at first 
 set(hsurfacesy,'FaceColor','interp','EdgeColor','none','visible','off','PickableParts','none')

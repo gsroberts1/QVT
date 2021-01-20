@@ -1,8 +1,8 @@
 function [area_val,diam_val,flowPerHeartCycle_val,maxVel_val,PI_val,RI_val,flowPulsatile_val,...
     velMean_val,VplanesAllx,VplanesAlly,VplanesAllz,r,timeMIPcrossection,segmentFull,...
     vTimeFrameave,MAGcrossection,bnumMeanFlow,bnumStdvFlow,StdvFromMean,Planes] ...
-    = paramMap_params_new(branchList,res,timeMIP,vMean,directory, ...
-    BGPCdone,nframes,fov,MAG,IDXstart,IDXend,handles)
+    = paramMap_params_new(filetype,branchList,matrix,timeMIP,vMean, ...
+    BGPCdone,directory,nframes,res,MAG,IDXstart,IDXend,handles)
 %PARAMMAP_PARAMS_NEW: Create tangent planes and calculate hemodynamics
 %   Used by: loadpcvipr.m
 %   Dependencies: slidingThreshold.m
@@ -128,27 +128,6 @@ clear N max_pts d dimIM
 %SE = ones(10,10,10);
 %CD_bin_new = imdilate(CD_bin,SE);
 
-%% Manual Background Phase Correction (if necessary)
-if ~BGPCdone
-    set(handles.TextUpdate,'String','Phase Correction with Polynomial'); drawnow;
-    
-    [poly_fitx,poly_fity,poly_fitz] = background_phase_correction(MAG,vMean(:,:,:,1),vMean(:,:,:,2),vMean(:,:,:,3));
-    disp('Correcting data with polynomial');
-    xrange = single(linspace(-1,1,size(MAG,1)));
-    yrange = single(linspace(-1,1,size(MAG,2)));
-    zrange = single(linspace(-1,1,size(MAG,3)));
-    [Y,X,Z] = meshgrid(yrange,xrange,zrange);
-    
-    % Get poly data and correct average velocity for x,y,z dimensions
-    back = zeros(size(vMean),'single');
-    back(:,:,:,1) = single(evaluate_poly(X,Y,Z,poly_fitx));
-    back(:,:,:,2) = single(evaluate_poly(X,Y,Z,poly_fity));
-    back(:,:,:,3) = single(evaluate_poly(X,Y,Z,poly_fitz));
-    vMean = vMean - back;
-    
-    clear X Y Z poly_fitx poly_fity poly_fitz range1 range2 range3 temp
-end
-
 %% Interpolation
 set(handles.TextUpdate,'String','Interpolating Data');drawnow;
 % Get interpolated velocity from 3 directions, multipley w/ tangent vector
@@ -164,7 +143,7 @@ temp(:,:,2) = bsxfun(@times,v2,Tangent_V(:,2)); %make veloc. through-plane
 temp(:,:,3) = bsxfun(@times,v3,Tangent_V(:,3)); %(mm/s)
 
 % Through-plane SPEED for all points (tangent vector dotted with 3D vel)
-vTimeFrameave = sqrt(temp(:,:,1).^2+temp(:,:,2).^2+temp(:,:,3).^2); %(mm/s)
+vTimeFrameave = sqrt(temp(:,:,1).^2 + temp(:,:,2).^2 + temp(:,:,3).^2); %(mm/s)
 
 % Interpolation for complex difference data
 CD_int = interp3(y,x,z,timeMIP,y_full(:),x_full(:),z_full(:),'linear',0);
@@ -203,7 +182,8 @@ for n = 1:size(Tangent_V,1)
     UPthresh = 0.5;
     SMf = 90; %smoothing factor
     shiftHM_flag = 0; %do not shift by FWHM
-    [~,segment] = slidingThreshold(weightIMAGE,step,UPthresh,SMf,shiftHM_flag);
+    medFilt_flag = 1; %flag for median filtering of CD image
+    [~,segment] = slidingThreshold(weightIMAGE,step,UPthresh,SMf,shiftHM_flag,medFilt_flag);
     areaThresh = round(sum(segment(:)).*0.005); %minimum area to keep
     conn = 6; %connectivity (i.e. 6-pt)
     segment = bwareaopen(segment,areaThresh,conn); %inverse fill holes
@@ -231,7 +211,7 @@ for n = 1:size(Tangent_V,1)
     %segment = imopen(segment,ones(3,3)); %morphological opening
     
     % Vessel area measurements
-    dArea = (fov/res)^2; %pixel size (cm^2)
+    dArea = (res/10)^2; %pixel size (cm^2)
     area_val(n) = sum(segment(:))*dArea*((2*r+1)/(2*r*InterpVals+1))^2;
     
     segmentFull(n,:) = segment(:);
@@ -271,23 +251,32 @@ COL = repmat(1:InterpVals*(width):(width)^2,[r*2+1 1])-1; %rep. lf-rt
 idCOL = reshape(ROW+COL,[1 numel(ROW)]); %interp query points
 
 for j = 1:nframes
-    set(handles.TextUpdate,'String',['Calculating Quantitative Parameters Time Frame: ' num2str(j) '/' num2str(nframes)]);drawnow;
-    
-    % Load x,y,z components of velocity
-    vx = load_dat(fullfile(directory, ['\ph_' num2str(j-1,'%03i') '_vd_1.dat']),[res res res]);
-    vy = load_dat(fullfile(directory, ['\ph_' num2str(j-1,'%03i') '_vd_2.dat']),[res res res]);
-    vz = load_dat(fullfile(directory, ['\ph_' num2str(j-1,'%03i') '_vd_3.dat']),[res res res]);
-    
-    % Crop velocity using crop indices from load_pcvipr.m
-    vz = vz(IDXstart(1):IDXend(1),IDXstart(2):IDXend(2),IDXstart(3):IDXend(3)); 
-    vx = vx(IDXstart(1):IDXend(1),IDXstart(2):IDXend(2),IDXstart(3):IDXend(3));
-    vy = vy(IDXstart(1):IDXend(1),IDXstart(2):IDXend(2),IDXstart(3):IDXend(3));
-    
-    % Correct background phase (if autoBGPC_flag is off)
-    if ~BGPCdone
-        vx = vx - back(:,:,:,1); %subtract off background phase in x-dir
-        vy = vy - back(:,:,:,2);
-        vz = vz - back(:,:,:,3);
+    if strcmp(filetype,'dat')
+        set(handles.TextUpdate,'String',['Calculating Quantitative Parameters Time Frame: ' num2str(j) '/' num2str(nframes)]);drawnow;
+
+        % Load x,y,z components of velocity - single frame
+        vx = load_dat(fullfile(directory, ['\ph_' num2str(j-1,'%03i') '_vd_1.dat']),[matrix(1) matrix(2) matrix(3)]);
+        vy = load_dat(fullfile(directory, ['\ph_' num2str(j-1,'%03i') '_vd_2.dat']),[matrix(1) matrix(2) matrix(3)]);
+        vz = load_dat(fullfile(directory, ['\ph_' num2str(j-1,'%03i') '_vd_3.dat']),[matrix(1) matrix(2) matrix(3)]);
+
+        % Crop velocity using crop indices from load_pcvipr.m
+        vz = vz(IDXstart(1):IDXend(1),IDXstart(2):IDXend(2),IDXstart(3):IDXend(3)); 
+        vx = vx(IDXstart(1):IDXend(1),IDXstart(2):IDXend(2),IDXstart(3):IDXend(3));
+        vy = vy(IDXstart(1):IDXend(1),IDXstart(2):IDXend(2),IDXstart(3):IDXend(3));
+        
+    else
+        set(handles.TextUpdate,'String',['Calculating Quantitative - Parameters Time Frame: ' num2str(j) '/' num2str(nframes)]);drawnow;
+        
+        % Load x,y,z components of velocity (cropped) - single frame
+        vx = h5read(fullfile(directory,'Flow.h5'),'/VX', ... 
+            [IDXstart(1),IDXstart(2),IDXstart(3),j], ...
+            [IDXend(1)-IDXstart(1)+1,IDXend(2)-IDXstart(2)+1,IDXend(3)-IDXstart(3)+1,1]);
+        vy = h5read(fullfile(directory,'Flow.h5'),'/VY', ... 
+            [IDXstart(1),IDXstart(2),IDXstart(3),j], ...
+            [IDXend(1)-IDXstart(1)+1,IDXend(2)-IDXstart(2)+1,IDXend(3)-IDXstart(3)+1,1]);
+        vz = h5read(fullfile(directory,'Flow.h5'),'/VZ', ... 
+            [IDXstart(1),IDXstart(2),IDXstart(3),j], ...
+            [IDXend(1)-IDXstart(1)+1,IDXend(2)-IDXstart(2)+1,IDXend(3)-IDXstart(3)+1,1]);
     end 
     
     % Interpolation of time-resolved velocities
@@ -299,23 +288,23 @@ for j = 1:nframes
     v3 = reshape(v3,[length(branchList),(width).^2]);
     v1 = bsxfun(@times,v1,Tangent_V(:,1)); %dot product here
     v2 = bsxfun(@times,v2,Tangent_V(:,2)); %make velocity through-plane
-    v3 = bsxfun(@times,v3,Tangent_V(:,3)); %(mm/s)
-                
+    v3 = bsxfun(@times,v3,Tangent_V(:,3)); %mm/s)
+
     VplanesAllx(:,:,j) = v1(:,idCOL); %uninterpolated TR vel. (mm/s)
     VplanesAlly(:,:,j) = v2(:,idCOL);
     VplanesAllz(:,:,j) = v3(:,idCOL);
 
     vTimeFrame = segmentFull.*(0.1*(v1 + v2 + v3)); %masked velocity (cm/s)
-    vTimeFramerowMean = sum(vTimeFrame,2) ./ sum(vTimeFrame~=0,2);%mean vel
-    flowPulsatile_val(:,j) = vTimeFramerowMean.*area_val; % TR flow (ml/s)
+    vTimeFramerowMean = sum(vTimeFrame,2) ./ sum(vTimeFrame~=0,2); %mean vel
+    flowPulsatile_val(:,j) = vTimeFramerowMean.*area_val; %TR flow (ml/s)
     maxVelFrame(:,j) = max(vTimeFrame,[],2); %max vel. each frame (cm/s)
-    velPulsatile_val(:,j) = vTimeFramerowMean;%mean vel. each frame (cm/s)   
-end
+    velPulsatile_val(:,j) = vTimeFramerowMean;%mean vel. each frame (cm/s)  
+end 
 clear COL ROW idCOL Tangent_V v1 v2 v3 vx vy vz x_full y_full z_full x y z
 
 %% Compute Hemodynamic Parameters
 maxVel_val = max(maxVelFrame,[],2); %max in-plane veloc. for all frames
-flowPerHeartCycle_val = sum(flowPulsatile_val,2)./(nframes);%TA flow (ml/s)
+flowPerHeartCycle_val = sum(flowPulsatile_val,2)./(nframes); %TA flow (ml/s)
 velMean_val = sum(velPulsatile_val,2)./(nframes); %TA in-plane velocities
 
 % Pulsatility Index (PI) = (systolic vel - diastolic vel)/(mean vel)
