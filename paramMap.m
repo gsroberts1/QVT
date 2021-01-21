@@ -63,7 +63,7 @@ handles.output = hObject;
 
 % Allow saving of Excel files on Mac/Linux/PC even without excel installed
 [filepath,~,~] = fileparts(mfilename('fullpath'));
-javaaddpath([filepath filesep 'java-support']);
+javaaddpath([filepath filesep 'poi_library']);
 
 % Update handles structure
 guidata(hObject, handles);
