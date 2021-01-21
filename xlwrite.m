@@ -86,12 +86,20 @@ function [status, message]=xlwrite(filename,A,sheet, range)
 %==============================================================================
 
 % Check if POI lib is loaded
+% Check if POI lib is loaded - try to autoload
 if exist('org.apache.poi.ss.usermodel.WorkbookFactory', 'class') ~= 8 ...
     || exist('org.apache.poi.hssf.usermodel.HSSFWorkbook', 'class') ~= 8 ...
     || exist('org.apache.poi.xssf.usermodel.XSSFWorkbook', 'class') ~= 8
-    
+try
+    cpath=fileparts(which(mfilename));
+    javaaddpath([cpath filesep 'poi_library' filesep 'poi-3.8-20120326.jar']);
+    javaaddpath([cpath filesep 'poi_library' filesep 'poi-ooxml-3.8-20120326.jar']);
+    javaaddpath([cpath filesep 'poi_library' filesep 'poi-ooxml-schemas-3.8-20120326.jar']);
+    javaaddpath([cpath filesep 'poi_library' filesep 'xmlbeans-2.3.0.jar']);
+    javaaddpath([cpath filesep 'poi_library' filesep 'dom4j-1.6.1.jar']);
+catch
     error('xlWrite:poiLibsNotLoaded',...
-        'The POI library is not loaded in Matlab.\nCheck that POI jar files are in Matlab Java path!');
+    'The POI library is not loaded in Matlab.\nAutoloading failed ...\nCheck that POI jar files are in Matlab Java path!');
 end
 
 % Import required POI Java Classes

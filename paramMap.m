@@ -27,7 +27,7 @@ function varargout = paramMap(varargin)
 
 % Developed by Carson Hoffman, University of Wisconsin-Madison 2019
 %   Used by: NONE (START FILE)
-%   Dependencies: loadpcvipr.m, xlwrite.m, myupdatefcn.m
+%   Dependencies: loadpcvipr.m, updateVcrossTR.m, myupdatefcn.m
 
 
 % Begin initialization code - DO NOT EDIT
