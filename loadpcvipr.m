@@ -14,7 +14,7 @@ function [nframes,matrix,res,timeres,VENC,area_vol,diam_vol,flowPerHeartCycle_vo
 %% Reads PCVIPR Header
 filetype = 'dat';
 set(handles.TextUpdate,'String','Loading .DAT Data'); drawnow;
-fid = fopen([directory '\pcvipr_header.txt'], 'r');
+fid = fopen([directory filesep 'pcvipr_header.txt'], 'r');
 delimiter = ' ';
 formatSpec = '%s%s%[^\n\r]'; %read 2 strings(%s%s),end line(^\n),new row(r)
 % Info from headers are placed in dataArray, 1x2 cell array.
@@ -37,7 +37,7 @@ VENC = pcviprHeader.VENC;
 
 %% Reads Data Header
 % Checks if automatic background phase correction was performed in recon
-fid = fopen([directory '\data_header.txt'], 'r');
+fid = fopen([directory filesep 'data_header.txt'], 'r');
 if fid>0
     dataHeader = textscan(fid, formatSpec, 'Delimiter', delimiter, ...
         'MultipleDelimsAsOne', true, 'ReturnOnError', false);

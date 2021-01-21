@@ -255,9 +255,9 @@ for j = 1:nframes
         set(handles.TextUpdate,'String',['Calculating Quantitative Parameters Time Frame: ' num2str(j) '/' num2str(nframes)]);drawnow;
 
         % Load x,y,z components of velocity - single frame
-        vx = load_dat(fullfile(directory, ['\ph_' num2str(j-1,'%03i') '_vd_1.dat']),[matrix(1) matrix(2) matrix(3)]);
-        vy = load_dat(fullfile(directory, ['\ph_' num2str(j-1,'%03i') '_vd_2.dat']),[matrix(1) matrix(2) matrix(3)]);
-        vz = load_dat(fullfile(directory, ['\ph_' num2str(j-1,'%03i') '_vd_3.dat']),[matrix(1) matrix(2) matrix(3)]);
+        vx = load_dat(fullfile(directory, ['ph_' num2str(j-1,'%03i') '_vd_1.dat']),[matrix(1) matrix(2) matrix(3)]);
+        vy = load_dat(fullfile(directory, ['ph_' num2str(j-1,'%03i') '_vd_2.dat']),[matrix(1) matrix(2) matrix(3)]);
+        vz = load_dat(fullfile(directory, ['ph_' num2str(j-1,'%03i') '_vd_3.dat']),[matrix(1) matrix(2) matrix(3)]);
 
         % Crop velocity using crop indices from load_pcvipr.m
         vz = vz(IDXstart(1):IDXend(1),IDXstart(2):IDXend(2),IDXstart(3):IDXend(3)); 
