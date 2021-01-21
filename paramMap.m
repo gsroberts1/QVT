@@ -61,10 +61,6 @@ function paramMap_OpeningFcn(hObject, eventdata, handles, varargin)
 % Choose default command line output for paramMap
 handles.output = hObject;
 
-% Allow saving of Excel files on Mac/Linux/PC even without excel installed
-[filepath,~,~] = fileparts(mfilename('fullpath'));
-javaaddpath([filepath filesep 'poi_library']);
-
 % Update handles structure
 guidata(hObject, handles);
 set(handles.TextUpdate,'String','Load in a 4D Flow Dataset');
