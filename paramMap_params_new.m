@@ -226,7 +226,6 @@ for n = 1:size(Tangent_V,1)
     Rout = max(D(:))/2; %radius of largest outer circle
     diam_val(n) = Rin^2/Rout^2; %ratio of areas
     diam_val(diam_val==inf) = 0;
-    
     %diam_val(n) = 2*sqrt(area_val(n)/pi); %equivalent diameter
     
 end

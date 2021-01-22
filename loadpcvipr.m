@@ -34,6 +34,7 @@ matrix(1) = pcviprHeader.matrixx; %number of pixels in rows (ASSUMED ISOTROPIC)
 matrix(2) = pcviprHeader.matrixy;
 matrix(3) = pcviprHeader.matrixz;
 VENC = pcviprHeader.VENC;
+clear dataArray delimiter fid formatSpec
 
 %% Reads Data Header
 % Checks if automatic background phase correction was performed in recon
@@ -90,7 +91,8 @@ IDXend(3) = matrix(3) - IDXend(3) + 1; %get last thresh crossing
 % Crop data with new dimensions
 MAG = MAG(IDXstart(1):IDXend(1),IDXstart(2):IDXend(2),IDXstart(3):IDXend(3));
 newDIM = size(MAG);
-    
+clear SUMnumA SUMnumC SUMnumS BIN ans fid
+
 %% Read Average Velocity
 vMean = zeros(newDIM(1),newDIM(2),newDIM(3),3,'single'); 
 % Looped reading of average velocity data.
@@ -98,6 +100,7 @@ for n = 1:3
     temp = load_dat(fullfile(directory,['comp_vd_' num2str(n) '.dat']),[matrix(1) matrix(2) matrix(3)]);
     vMean(:,:,:,n) = temp(IDXstart(1):IDXend(1),IDXstart(2):IDXend(2),IDXstart(3):IDXend(3));
 end
+clear temp newDIM n
 
 %% Manual Background Phase Correction (if necessary)
 if ~BGPCdone
@@ -117,7 +120,7 @@ if ~BGPCdone
     back(:,:,:,3) = single(evaluate_poly(X,Y,Z,poly_fitz));
     vMean = vMean - back;
     BGPCdone = 1;
-    clear X Y Z poly_fitx poly_fity poly_fitz range1 range2 range3 temp
+    clear X Y Z poly_fitx poly_fity poly_fitz xrange yrange zrange
 end
 
 %% Create Angio
@@ -138,16 +141,13 @@ areaThresh = round(sum(segment(:)).*0.005); %minimum area to keep
 conn = 6; %connectivity (i.e. 6-pt)
 segment = bwareaopen(segment,areaThresh,conn); %inverse fill holes
 
-clear CDcrop x y SMf temp n halfMaxRightIndex halfMaxLeftIndex Idx BIN 
-clear curvatureSM denom num ddy dy ddx dx areaThresh fullWidth conn
-clear Sval iter maxThresh newDIM dataArray fid formatSpec delimiter
-clear SUMnumA SUMnumC SUMnumS SUMnum step ans dataHeader UPthresh shiftHM_flag
-
+% save raw (cropped) images to imageData structure (for Visual Tool)
 imageData.MAG = MAG;
 imageData.CD = timeMIP; 
 imageData.V = vMean;
 imageData.Segmented = segment;
 imageData.pcviprHeader = pcviprHeader;
+clear step UPthresh SMf shiftHM_flag medFilt_flag areaThresh conn ans
 
 %% Feature Extraction
 % Get trim and create the centerline data
