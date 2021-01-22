@@ -990,7 +990,9 @@ VcrossTR = 0.1*(v1 + v2 + v3);
 normDim = sqrt(size(VcrossTR,1));
 VcrossTR = reshape(VcrossTR,normDim,normDim,nframes);
 VcrossTR = imresize(VcrossTR,[imdim imdim],'nearest');
-imshow(VcrossTR(:,:,sliceNum),[],'InitialMagnification','fit','Parent',hfull.TRcross)
+minn = min(Maskcross.*VcrossTR,[],'all')*1.1;
+maxx = max(Maskcross.*VcrossTR,[],'all')*1.1;
+imshow(VcrossTR(:,:,sliceNum),[minn maxx],'InitialMagnification','fit','Parent',hfull.TRcross)
 visboundaries(hfull.TRcross,Maskcross,'LineWidth',1)
     
 
@@ -1057,7 +1059,9 @@ VcrossTR = 0.1*(v1 + v2 + v3);
 normDim = sqrt(size(VcrossTR,1));
 VcrossTR = reshape(VcrossTR,normDim,normDim,nframes);
 VcrossTR = imresize(VcrossTR,[imdim imdim],'nearest');
-imshow(VcrossTR(:,:,sliceNum),[],'InitialMagnification','fit','Parent',hfull.TRcross)
+minn = min(Maskcross.*VcrossTR,[],'all')*1.1;
+maxx = max(Maskcross.*VcrossTR,[],'all')*1.1;
+imshow(VcrossTR(:,:,sliceNum),[minn maxx],'InitialMagnification','fit','Parent',hfull.TRcross)
 visboundaries(hfull.TRcross,Maskcross,'LineWidth',1)
 
 % Segmentation mask
