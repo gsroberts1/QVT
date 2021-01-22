@@ -34,7 +34,7 @@ matrix(1) = pcviprHeader.matrixx; %number of pixels in rows (ASSUMED ISOTROPIC)
 matrix(2) = pcviprHeader.matrixy;
 matrix(3) = pcviprHeader.matrixz;
 VENC = pcviprHeader.VENC;
-clear dataArray delimiter fid formatSpec
+clear dataArray fid
 
 %% Reads Data Header
 % Checks if automatic background phase correction was performed in recon
@@ -100,7 +100,7 @@ for n = 1:3
     temp = load_dat(fullfile(directory,['comp_vd_' num2str(n) '.dat']),[matrix(1) matrix(2) matrix(3)]);
     vMean(:,:,:,n) = temp(IDXstart(1):IDXend(1),IDXstart(2):IDXend(2),IDXstart(3):IDXend(3));
 end
-clear temp newDIM n
+clear temp newDIM n formatSpec delimiter
 
 %% Manual Background Phase Correction (if necessary)
 if ~BGPCdone
