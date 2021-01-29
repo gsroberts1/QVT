@@ -99,7 +99,7 @@ p = []; %used in cursor updatefunction
 directory = uigetdir; %interactive directory selection
 
 % Creates list of all .mat files in selected directory
-d = dir([directory '/*.mat']);
+d = dir([directory filesep '*.mat']);
 fn = [{'Load New Case'},{d.name}];
 [fileIndx,~] = listdlg('PromptString','Select a file:', ...
     'ListSize',[200 300],'SelectionMode','single','ListString',fn);
@@ -965,35 +965,37 @@ global dcm_obj hfull segment1 VplanesAllx VplanesAlly VplanesAllz nframes
 global branchList
 
 info_struct = getCursorInfo(dcm_obj);
-ptList = [info_struct.Position];
-ptList = reshape(ptList,[3,numel(ptList)/3])';
-pindex = zeros(size(ptList,1),1);
-% Find cursor point in branchList
-for n = 1:size(ptList,1)
-    xIdx = find(branchList(:,1) == ptList(n,2));
-    yIdx = find(branchList(xIdx,2) == ptList(n,1));
-    zIdx = find(branchList(xIdx(yIdx),3) == ptList(n,3));
-    pindex(n) = xIdx(yIdx(zIdx));
-end
-imdim = sqrt(size(segment1,2)); %side length of cross-section
+if ~isempty(info_struct)
+    ptList = [info_struct.Position];
+    ptList = reshape(ptList,[3,numel(ptList)/3])';
+    pindex = zeros(size(ptList,1),1);
+    % Find cursor point in branchList
+    for n = 1:size(ptList,1)
+        xIdx = find(branchList(:,1) == ptList(n,2));
+        yIdx = find(branchList(xIdx,2) == ptList(n,1));
+        zIdx = find(branchList(xIdx(yIdx),3) == ptList(n,3));
+        pindex(n) = xIdx(yIdx(zIdx));
+    end
+    imdim = sqrt(size(segment1,2)); %side length of cross-section
 
-Maskcross = segment1(pindex,:);
-Maskcross = reshape(Maskcross,imdim,imdim);
+    Maskcross = segment1(pindex,:);
+    Maskcross = reshape(Maskcross,imdim,imdim);
 
-%get slice number from slider
-sliceNum = 1+round( get(hfull.VcrossTRslider,'Value').*(nframes-1) ); 
-    
-v1 = squeeze(VplanesAllx(pindex,:,:));
-v2 = squeeze(VplanesAlly(pindex,:,:));
-v3 = squeeze(VplanesAllz(pindex,:,:));
-VcrossTR = 0.1*(v1 + v2 + v3);
-normDim = sqrt(size(VcrossTR,1));
-VcrossTR = reshape(VcrossTR,normDim,normDim,nframes);
-VcrossTR = imresize(VcrossTR,[imdim imdim],'nearest');
-minn = min(Maskcross.*VcrossTR,[],'all')*1.1;
-maxx = max(Maskcross.*VcrossTR,[],'all')*1.1;
-imshow(VcrossTR(:,:,sliceNum),[minn maxx],'InitialMagnification','fit','Parent',hfull.TRcross)
-visboundaries(hfull.TRcross,Maskcross,'LineWidth',1)
+    %get slice number from slider
+    sliceNum = 1+round( get(hfull.VcrossTRslider,'Value').*(nframes-1) ); 
+
+    v1 = squeeze(VplanesAllx(pindex,:,:));
+    v2 = squeeze(VplanesAlly(pindex,:,:));
+    v3 = squeeze(VplanesAllz(pindex,:,:));
+    VcrossTR = 0.1*(v1 + v2 + v3);
+    normDim = sqrt(size(VcrossTR,1));
+    VcrossTR = reshape(VcrossTR,normDim,normDim,nframes);
+    VcrossTR = imresize(VcrossTR,[imdim imdim],'nearest');
+    minn = min(Maskcross.*VcrossTR,[],'all')*1.1;
+    maxx = max(Maskcross.*VcrossTR,[],'all')*1.1;
+    imshow(VcrossTR(:,:,sliceNum),[minn maxx],'InitialMagnification','fit','Parent',hfull.TRcross)
+    visboundaries(hfull.TRcross,Maskcross,'LineWidth',1)
+end 
     
 
 
