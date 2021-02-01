@@ -3,6 +3,10 @@
 % Author: Grant Roberts
 % Date: September 18 2019
 
+% Known issues:
+% 1. Regarding gating tracks, works when
+%       a.) have both Gating_Track_xxxxxxxx.pcvipr_track and Gating_Track_xxxxxxxx.pcvipr_track.full 
+%       b.) have Gating_track_xxxxxxxx.pcvipr_track only  
 
 %% Filter Gating Directory
 gatingDir = uigetdir(pwd, 'Select the directory with the gating tracks');
@@ -38,6 +42,16 @@ if ~isempty(idx) % if we found something..
     gatingTrackFull.time = gate(:,3)/1e3; % time at each data point (ms)
     gatingTrackFull.prep = gate(:,4); % unsure what this is
     gatingTrackFull.acq = gate(:,5); % data point acquisition number
+    
+    % stats before cleaning data (currently only gating track (full and nonfull) supported)
+    gatingTrackFull.unclean = 2*median(gatingTrackFull.ecg);% use all data to get some statistics, this is the RR interval
+    within_rr = gatingTrackFull.ecg < gatingTrackFull.unclean;
+    ecg_filtered = gatingTrackFull.ecg(within_rr);
+    sum_within = size(ecg_filtered,1);
+    sum_total = size(gatingTrackFull.ecg,1);
+    gatingTrackFull.pct_within_rr = 100.0*sum_within / sum_total;  
+    gatingTrackFull.uncleanbpm = 60000./(gatingTrackFull.unclean); 
+    
     [rrFull, peaksFull] = getRR(gatingTrackFull.ecg); % get all rr intervals
         gatingTrackFull.rr = (nan(size(gate,1),1)); % expand rr vector to match gate lengths
         gatingTrackFull.rr(peaksFull) = rrFull; % fill in expanded Nan vector with rrs
@@ -78,6 +92,16 @@ if ~isempty(idx)
     gatingTrack.time = gate(:,3)/1e3;
     gatingTrack.prep = gate(:,4);
     gatingTrack.acq = (1:size(gate,1))'; % generate a data acquisition row
+    
+    % stats before cleaning data (currently only gating track (full and nonfull) supported)
+    gatingTrack.unclean = 2*median(gatingTrack.ecg);% use all data to get some statistics, this is the RR interval
+    within_rr = gatingTrack.ecg < gatingTrack.unclean;
+    ecg_filtered = gatingTrack.ecg(within_rr);
+    sum_within = size(ecg_filtered,1);
+    sum_total = size(gatingTrack.ecg,1);
+    gatingTrack.pct_within_rr = 100.0*sum_within / sum_total;  
+    gatingTrack.uncleanbpm = 60000./(gatingTrack.unclean);
+    
     [rr, peaks] = getRR(gatingTrack.ecg);
         gatingTrack.rr = (nan(size(gate,1),1));
         gatingTrack.rr(peaks) = rr;
@@ -396,6 +420,12 @@ if sum(contains(filesLoaded,'pcvipr_track'))==1 || badProspGating % only the "pc
     fprintf('    Total Recorded heartbeats: \t \t \t \t %d beats.\n',length(peaks));
     fprintf('    Estimated # missed heartbeats: \t \t \t \t %d beats (%2.2f%%).\n',numMissed,100*(numMissed/length(peaks)));
     fprintf('    Estimated # early triggers: \t \t \t \t %d beats (%2.2f%%).\n\n',numEarly,100*(numEarly/length(peaks)));
+        
+    fprintf('!!ECG/PG Gating Statistics using ALL DATA:!!\n') 
+    fprintf('    All data Median RR: \t \t \t \t %7.2f ms.\n',nanmedian(gatingTrack.unclean));
+    fprintf('    All data expected heart rate: \t \t %7.2f bpm.\n',nanmedian(gatingTrack.uncleanbpm));
+    fprintf('    Values within expected RR: \t \t \t %7.2f %%.\n\n',nanmedian(gatingTrack.pct_within_rr));
+    
 end 
         
         
@@ -565,6 +595,11 @@ if sum(contains(filesLoaded,'pcvipr_track'))==2 % if we have both ".pcvipr_track
     fprintf('    Total Recorded heartbeats: \t \t \t \t %d beats.\n',length(peaksFull));
     fprintf('    Estimated # missed heartbeats: \t \t \t \t %d beats (%2.2f%%).\n',numMissedFull,100*(numMissedFull/length(peaksFull)));
     fprintf('    Estimated # early triggers: \t \t \t \t %d beats (%2.2f%%).\n\n',numEarlyFull,100*(numEarlyFull/length(peaksFull)));
+    
+    fprintf('!!ECG/PG Gating Statistics using ALL DATA:!!\n') 
+    fprintf('    All data Median RR: \t \t \t \t %7.2f ms.\n',nanmedian(gatingTrackFull.unclean));
+    fprintf('    All data expected heart rate: \t \t %7.2f bpm.\n',nanmedian(gatingTrackFull.uncleanbpm));
+    fprintf('    Values within expected RR: \t \t \t %7.2f %%.\n\n',nanmedian(gatingTrackFull.pct_within_rr));
 end 
 
 
@@ -637,11 +672,13 @@ if isempty(filesLoaded) % if we didn't find anything to load..
     disp('No gating tracks were found');
     return % kick us out
 end 
-ecgData.prospectiveGating = prospectiveGating; % save prospectiveGating flag to compositive dataset
-ecgData.encodeLength = encodeLength; % save encoding type to compositive dataset
-ecgData.filesLoaded = filesLoaded; % save all files loaded into compositive dataset
-save('ecgData.mat','ecgData'); % this file contains all loaded information
-diary off % turn off diary, stop writing to ecgInformation.txt
+if sum(contains(filesLoaded,'ECG2Data'))==1
+    ecgData.prospectiveGating = prospectiveGating; % save prospectiveGating flag to compositive dataset
+    ecgData.encodeLength = encodeLength; % save encoding type to compositive dataset
+    ecgData.filesLoaded = filesLoaded; % save all files loaded into compositive dataset
+    save('ecgData.mat','ecgData'); % this file contains all loaded information
+    diary off % turn off diary, stop writing to ecgInformation.txt
+end
 
 
 
