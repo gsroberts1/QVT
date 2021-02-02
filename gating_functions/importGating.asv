@@ -423,10 +423,12 @@ if sum(contains(filesLoaded,'pcvipr_track'))==1 || badProspGating % only the "pc
     fprintf('    All data expected heart rate: \t \t %7.2f bpm.\n',nanmedian(gatingTrack.uncleanbpm));
     fprintf('    Values within expected RR: \t \t \t %7.2f %%.\n\n',nanmedian(gatingTrack.pct_within_rr));
     
-    gating_stats = {'Median RR (ms)'; 'HR (bpm)';'Values within expected RR (%)'; 'Total Recorded heartbeats';'Estimated # missed heartbeats (%)';'Estimated # early triggers (%)'};
-    val = [nanmedian(gatingTrack.unclean); round(nanmedian(gatingTrack.uncleanbpm));round(nanmedian(gatingTrack.pct_within_rr)); length(peaks); round(100*(numMissed/length(peaks)),2);round(100*(numEarly/length(peaks)),2)];
-    export_table = table(gating_stats,val)
-    writetable(export_table,'gating_stats.csv','Delimiter',',')
+    gating_stats = {'Median RR (ms)'; 'HR (bpm)';'Values within expected RR (%)'; 'Total Recorded heartbeats','Estimated # missed heartbeats (%)','Estimated # early triggers (%)'};
+    values = [nanmedian(gatingTrack.unclean); nanmedian(gatingTrack.uncleanbpm);nanmedian(gatingTrack.pct_within_rr; length(peaks); 100*(numMissed/length(peaks));100*(numEarly/length(peaks))];
+    
+    export_data = table({'Median RR (ms)'; 'HR (bpm)';'Values within expected RR (%)'},round([nanmedian(gatingTrack.unclean); nanmedian(gatingTrack.uncleanbpm);nanmedian(gatingTrack.pct_within_rr)]))
+    writetable(export_data,'gating_stats.csv','Delimiter',',')
+
 end 
         
         
@@ -597,16 +599,10 @@ if sum(contains(filesLoaded,'pcvipr_track'))==2 % if we have both ".pcvipr_track
     fprintf('    Estimated # missed heartbeats: \t \t \t \t %d beats (%2.2f%%).\n',numMissedFull,100*(numMissedFull/length(peaksFull)));
     fprintf('    Estimated # early triggers: \t \t \t \t %d beats (%2.2f%%).\n\n',numEarlyFull,100*(numEarlyFull/length(peaksFull)));
     
-    % Lets export the 
     fprintf('!!ECG/PG Gating Statistics using ALL DATA:!!\n') 
     fprintf('    All data Median RR: \t \t \t \t %7.2f ms.\n',nanmedian(gatingTrackFull.unclean));
     fprintf('    All data expected heart rate: \t \t %7.2f bpm.\n',nanmedian(gatingTrackFull.uncleanbpm));
     fprintf('    Values within expected RR: \t \t \t %7.2f %%.\n\n',nanmedian(gatingTrackFull.pct_within_rr));
-    
-    gating_stats = {'Median RR (ms)'; 'HR (bpm)';'Values within expected RR (%)'; 'Total Recorded heartbeats';'Estimated # missed heartbeats (%)';'Estimated # early triggers (%)'};
-    val = [nanmedian(gatingTrackFull.unclean); round(nanmedian(gatingTrackFull.uncleanbpm));round(nanmedian(gatingTrackFull.pct_within_rr)); length(peaksFull); round(100*(numMissedFull/length(peaksFull)),2);round(100*(numEarlyFull/length(peaksFull)),2)];
-    export_table = table(gating_stats,val)
-    writetable(export_table,'gating_stats.csv','Delimiter',',')
 end 
 
 
