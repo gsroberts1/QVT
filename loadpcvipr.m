@@ -63,6 +63,9 @@ MAG = load_dat(fullfile(directory,'MAG.dat'),[matrix(1) matrix(2) matrix(3)]);
 SUMnumA = squeeze(sum(sum(MAG,1),2)); %1D axial projection
 SUMnumS = squeeze(sum(sum(MAG,1),3))'; %1D sagittal projection
 SUMnumC = squeeze(sum(sum(MAG,2),3)); %1D coronal projection
+SUMnumA = rescale(SUMnumA,'InputMin',min(SUMnumA),'InputMax',max(SUMnumA)); 
+SUMnumS = rescale(SUMnumS,'InputMin',min(SUMnumS),'InputMax',max(SUMnumS)); 
+SUMnumC = rescale(SUMnumC,'InputMin',min(SUMnumC),'InputMax',max(SUMnumC)); 
 
 % Chop off edges of projections (usually noisy data)
 SUMnumA(1:3) = 0; SUMnumA(end-2:end) = 0;
@@ -70,19 +73,16 @@ SUMnumS(1:3) = 0; SUMnumS(end-2:end) = 0;
 SUMnumC(1:3) = 0; SUMnumC(end-2:end) = 0;
 
 % Normalize values (from 0-1)
-SUMnumC = rescale(SUMnumC,'InputMin',min(SUMnumC),'InputMax',max(SUMnumC)); 
 BIN = SUMnumC>0.25; % Find where projection crosses thresh value of 0.25 
 [~,IDXstart(1)] = max(BIN,[],1); %get first thresh crossing
 [~,IDXend(1)] = max(flipud(BIN),[],1); 
 IDXend(1) = matrix(1) - IDXend(1) + 1; %get last thresh crossing
 
-SUMnumS = rescale(SUMnumS,'InputMin',min(SUMnumS),'InputMax',max(SUMnumS)); 
 BIN = SUMnumS>0.25; % Find where projection crosses thresh value of 0.25 
 [~,IDXstart(2)] = max(BIN,[],1); %get first thresh crossing
 [~,IDXend(2)] = max(flipud(BIN),[],1); 
 IDXend(2) = matrix(2) - IDXend(2) + 1; %get last thresh crossing
 
-SUMnumA = rescale(SUMnumA,'InputMin',min(SUMnumA),'InputMax',max(SUMnumA)); 
 BIN = SUMnumA>0.25; % Find where projection crosses thresh value of 0.25 
 [~,IDXstart(3)] = max(BIN,[],1); %get first thresh crossing
 [~,IDXend(3)] = max(flipud(BIN),[],1); 
