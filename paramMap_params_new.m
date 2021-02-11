@@ -175,7 +175,7 @@ for n = 1:size(Tangent_V,1)
     temp = magSLICE - min(magSLICE);
     magSLICE = temp./max(temp(:));
     
-    weightIMS = [.1 .9 0]; % Weights = [Mag CD Vel]
+    weightIMS = [.2 .8 .2]; % Weights = [Mag CD Vel]
     weightIMAGE = (weightIMS(1).*magSLICE) + (weightIMS(2).*cdSLICE) + (weightIMS(3).*velSLICE);
     
     step = 0.001;
