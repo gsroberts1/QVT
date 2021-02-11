@@ -175,19 +175,19 @@ for n = 1:size(Tangent_V,1)
     temp = magSLICE - min(magSLICE);
     magSLICE = temp./max(temp(:));
     
-    weightIMS = [.2 .6 .2]; % Weights = [Mag CD Vel]
+    weightIMS = [.1 .9 0]; % Weights = [Mag CD Vel]
     weightIMAGE = (weightIMS(1).*magSLICE) + (weightIMS(2).*cdSLICE) + (weightIMS(3).*velSLICE);
     
     step = 0.001;
-    UPthresh = 0.5;
+    UPthresh = 0.8;
     SMf = 90; %smoothing factor
     shiftHM_flag = 0; %do not shift by FWHM
     medFilt_flag = 1; %flag for median filtering of CD image
     [~,segment] = slidingThreshold(weightIMAGE,step,UPthresh,SMf,shiftHM_flag,medFilt_flag);
-    areaThresh = round(sum(segment(:)).*0.005); %minimum area to keep
+    areaThresh = round(sum(segment(:)).*0.05); %minimum area to keep
     conn = 6; %connectivity (i.e. 6-pt)
     segment = bwareaopen(segment,areaThresh,conn); %inverse fill holes
-    
+    segment = imerode(segment,strel('disk',1));
     % Can compare in-plane segmentation to initial global segmentation. 
     % To do this, the 'segment' variable from 'loadpcvipr' needs to be 
     % passed as an arg. I did this by adding 'segment_old' as 2nd input
