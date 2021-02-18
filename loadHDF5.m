@@ -53,7 +53,6 @@ nframes = pcviprHeader.frames;
 BGPCdone = pcviprHeader.automatic_BGPC_flag;
 BGPCdone = 0; %assume automatic backg. phase corr. wasnt done in recon
 
-  
 %% Auto crop images (from MAG data)
 % Done to save memory when loading in TR velocity data below.
 SUMnumA = squeeze(sum(sum(MAG,1),2)); %1D axial projection
@@ -159,6 +158,9 @@ imageData.CD = timeMIP;
 imageData.V = vMean;
 imageData.Segmented = segment;
 imageData.pcviprHeader = pcviprHeader;
+imageData.gating_rr = pcviprHeader.median_rr_interval_ms;
+imageData.gating_hr = pcviprHeader.expected_hr_bpm;
+imageData.gating_var = pcviprHeader.vals_within_expected_rr_pct;
 
 %% Feature Extraction
 % Get trim and create the centerline data

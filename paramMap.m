@@ -164,6 +164,8 @@ if  fileIndx > 1  %if a pre-processed case is selected
 else
     %Load in pcvipr data from scratch
     if ~isfile(fullfile(directory,'Flow.h5'))
+                
+        load_filetype = 'dat';
         [nframes,matrix,res,timeres,VENC,area_vol,diam_vol,flowPerHeartCycle_vol, ...
             maxVel_vol,PI_vol,RI_vol,flowPulsatile_vol,velMean_val, ...
             VplanesAllx,VplanesAlly,VplanesAllz,Planes,branchList,segment,r, ...
@@ -171,6 +173,7 @@ else
             bnumMeanFlow,bnumStdvFlow,StdvFromMean] ...
             = loadpcvipr(directory,handles);
     else
+        load_filetype = 'h5';
         [nframes,matrix,res,timeres,VENC,area_vol,diam_vol,flowPerHeartCycle_vol, ...
             maxVel_vol,PI_vol,RI_vol,flowPulsatile_vol,velMean_val, ...
             VplanesAllx,VplanesAlly,VplanesAllz,Planes,branchList,segment,r, ...
@@ -231,6 +234,14 @@ else
     % Where to save data images and excel summary files
     SavePath = [directory filesep SummaryName];
     
+    % export gating stats (only h5 support currently)
+    if strcmp(load_filetype,'h5')
+        gating_stats = {'Median RR (ms)'; 'HR (bpm)';'Values within expected RR (%)'};
+        val = [imageData.gating_rr, imageData.gating_hr, imageData.gating_var]';
+        export_table = table(gating_stats,val);
+        writetable(export_table,[SavePath filesep 'gating_stats.csv'],'Delimiter',',');
+    end
+        
     % Create excel files save summary data
     col_header = ({'Vessel Label', 'Centerline Point', 'Notes', ...
         'Max Velocity < 80cm/s','Mean Flow ml/s','Pulsatility Index','Branch Label'});
