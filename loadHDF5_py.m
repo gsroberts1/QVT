@@ -3,7 +3,7 @@ function [nframes,matrix,res,timeres,VENC,area_vol,diam_vol,flowPerHeartCycle_vo
     VplanesAllx,VplanesAlly,VplanesAllz,Planes,branchList,segment,r, ...
     timeMIPcrossection,segment1,vTimeFrameave,MAGcrossection, imageData, ...
     bnumMeanFlow,bnumStdvFlow,StdvFromMean] = loadHDF5(directory,handles)
-%LOADHDF5: loadhdf5 reads in PCVIPR data saved in h5
+%LOADHDF5: loadhdf5 reads in python-reconstructed PCVIPR data.
 %   Used by: paramMap.m
 %   Dependencies: background_phase_correction.m, evaluate_poly.m, calc_angio.m,
 %   feature_extraction.m, paramMap_params_new.m, makeITPlane.m, slidingThreshold.m
@@ -12,46 +12,60 @@ function [nframes,matrix,res,timeres,VENC,area_vol,diam_vol,flowPerHeartCycle_vo
 filetype = 'hdf5';
 set(handles.TextUpdate,'String','Loading .HDF5 Data'); drawnow;
 %cd = h5read(fullfile(directory,'Flow.h5'),'/ANGIO');
-mag = h5read(fullfile(directory,'Flow.h5'),'/Data/MAG');
-vx = h5read(fullfile(directory,'Flow.h5'),'/Data/comp_vd_1');
-vy = h5read(fullfile(directory,'Flow.h5'),'/Data/comp_vd_2');
-vz = h5read(fullfile(directory,'Flow.h5'),'/Data/comp_vd_3');
+mag = h5read(fullfile(directory,'Flow.h5'),'/MAG');
+vx = h5read(fullfile(directory,'Flow.h5'),'/VX');
+vy = h5read(fullfile(directory,'Flow.h5'),'/VY');
+vz = h5read(fullfile(directory,'Flow.h5'),'/VZ');
+
+matrix(1) = size(mag,1);                 
+matrix(2) = size(mag,2);
+matrix(3) = size(mag,3);
+nframes = size(mag,4);
 
 disp('Computing time-averaged data')
 %CD = mean(cd,4)*32000;
-MAG = single(mag);
-V(:,:,:,1) = single(vx);
-V(:,:,:,2) = single(vy);
-V(:,:,:,3) = single(vz);
+MAG = mean(mag,4)*32000;
+V(:,:,:,1) = mean(vx,4)*10;
+V(:,:,:,2) = mean(vy,4)*10;
+V(:,:,:,3) = mean(vz,4)*10;
 
 clear mag vx vy vz
 
-%% Reads PCVIPR Header from H5
-headerh5 = h5info(fullfile(directory,'Flow.h5'),'/Header');
-for i = 1:size(headerh5.Attributes,1)
-    new_field = headerh5.Attributes(i).Name;
-    if(strcmp(new_field,'2d_flag')) 
-     %skip    
-    else
-        attr_val = headerh5.Attributes(i).Value;    
-        if (isnumeric(attr_val))
-            attr_val = double(attr_val);
-        end
-        pcviprHeader.(new_field) = attr_val; 
-    end   
-end
+%% Reads PCVIPR Header
+fid = fopen([directory filesep 'pcvipr_header.txt'], 'r');
+delimiter = ' ';
+formatSpec = '%s%s%[^\n\r]'; %read 2 strings(%s%s),end line(^\n),new row(r)
+% Info from headers are placed in dataArray, 1x2 cell array.
+dataArray = textscan(fid, formatSpec, 'Delimiter', delimiter, ...
+    'MultipleDelimsAsOne', true, 'ReturnOnError', false);
+fclose(fid);
+
+% Converts value column from strings to structure with nums.
+dataArray{1,2} = cellfun(@str2num,dataArray{1,2}(:), 'UniformOutput', false);
+pcviprHeader = cell2struct(dataArray{1,2}(:), dataArray{1,1}(:), 1);
 
 %%%% SPATIAL RESOLUTION ASSUMED TO BE ISOTROPIC (PCVIPR)
 timeres = pcviprHeader.timeres; %temporal resolution (ms)
 res = nonzeros(abs([pcviprHeader.ix,pcviprHeader.iy,pcviprHeader.iz])); %spatial res (mm)
 VENC = pcviprHeader.VENC;
-matrix(1) = pcviprHeader.matrixx; %number of pixels in rows (ASSUMED ISOTROPIC)
-matrix(2) = pcviprHeader.matrixy;
-matrix(3) = pcviprHeader.matrixz;
-nframes = pcviprHeader.frames;
+
+%% Reads Data Header
 % Checks if automatic background phase correction was performed in recon
-BGPCdone = pcviprHeader.automatic_BGPC_flag;
-BGPCdone = 0; %assume automatic backg. phase corr. wasnt done in recon
+fid = fopen([directory filesep 'data_header.txt'], 'r');
+if fid>0
+    dataHeader = textscan(fid, formatSpec, 'Delimiter', delimiter, ...
+        'MultipleDelimsAsOne', true, 'ReturnOnError', false);
+    fclose(fid);
+    bgpcIdx = find(contains(dataHeader{1,1},'automatic_BGPC_flag'));
+    if isempty(bgpcIdx)
+        BGPCdone = 0;
+    else
+        BGPCdone = dataHeader{1,2}{bgpcIdx};
+        BGPCdone = str2double(BGPCdone);
+    end 
+else
+    BGPCdone = 0; %assume automatic backg. phase corr. wasnt done in recon
+end 
 
   
 %% Auto crop images (from MAG data)
@@ -92,7 +106,7 @@ newDIM = size(MAG);
 vMean = zeros(newDIM(1),newDIM(2),newDIM(3),3,'single'); 
 % Looped reading of average velocity data.
 for n = 1:3
-    vMean(:,:,:,n) = V(IDXstart(1):IDXend(1),IDXstart(2):IDXend(2),IDXstart(3):IDXend(3),n);
+    vMean(:,:,:,n) = V(IDXstart(1):IDXend(1),IDXstart(2):IDXend(2),IDXstart(3):IDXend(3)); %typo at end missing n
 end
 
 %% Manual Background Phase Correction (if necessary)
@@ -177,6 +191,11 @@ spurLength = 15; %minimum branch length (removes short spurs)
 set(handles.TextUpdate,'String','All Data Loaded'); drawnow;
 
 return
+
+
+
+
+
 
 
 
