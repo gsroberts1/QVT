@@ -54,6 +54,36 @@ else
     BGPCdone = 0; %assume automatic backg. phase corr. wasnt done in recon
 end 
 
+
+%% Read Gating Track
+find_gating_file = dir('*pcvipr_track');
+if ~isempty(find_gating_file)
+    name = find_gating_file.name;
+    fid = fopen(name);
+    gate = fread(fid,'int32','b');
+    gate = reshape(gate,[numel(gate)/4 4]);
+    gate = sortrows(gate,3);
+    fclose(fid);
+
+    % Put data into gatingTrack structure
+    gatingTrack.ecg = gate(:,1);
+
+    gatingTrack.unclean = 2*median(gatingTrack.ecg);% this is the RR interval
+    within_rr = gatingTrack.ecg < gatingTrack.unclean;
+    ecg_filtered = gatingTrack.ecg(within_rr);
+    sum_within = size(ecg_filtered,1);
+    sum_total = size(gatingTrack.ecg,1);
+    gatingTrack.pct_within_rr = 100.0*sum_within / sum_total;  
+    gatingTrack.uncleanbpm = 60000./(gatingTrack.unclean);
+    gating_rr = nanmedian(gatingTrack.unclean);
+    gating_hr = round(nanmedian(gatingTrack.uncleanbpm));
+    gating_var = round(nanmedian(gatingTrack.pct_within_rr));
+else
+    gating_rr = "missing gating file";
+    gating_hr = "missing gating file";
+    gating_var = "missing gating file";
+end
+    
 %% Read MAG Data    
 set(handles.TextUpdate,'String','Loading Time Averaged Data'); drawnow;
 MAG = load_dat(fullfile(directory,'MAG.dat'),[matrix(1) matrix(2) matrix(3)]);
@@ -147,7 +177,11 @@ imageData.CD = timeMIP;
 imageData.V = vMean;
 imageData.Segmented = segment;
 imageData.pcviprHeader = pcviprHeader;
+imageData.gating_rr = gating_rr;
+imageData.gating_hr = gating_hr;
+imageData.gating_var = gating_var;
 clear step UPthresh SMf shiftHM_flag medFilt_flag areaThresh conn ans
+
 
 %% Feature Extraction
 % Get trim and create the centerline data
