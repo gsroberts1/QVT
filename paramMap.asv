@@ -235,7 +235,7 @@ else
     
     % export gating stats 
     gating_stats = {'Median RR (ms)'; 'HR (bpm)';'Values within expected RR (%)'};
-    val = [imageData.gating_rr, imageData.gating_hr, imageData.gating_var]';
+    val = [imageData.gating_rr, imageData.gating_hr, round(imageData.gating_var)]';
     gating_table = table(gating_stats,val);
     writetable(gating_table,[SavePath filesep 'gating_stats.csv'],'Delimiter',',');
         
