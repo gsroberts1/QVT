@@ -1,7 +1,7 @@
 function [area_val,diam_val,flowPerHeartCycle_val,maxVel_val,PI_val,RI_val,flowPulsatile_val,...
     velMean_val,VplanesAllx,VplanesAlly,VplanesAllz,r,timeMIPcrossection,segmentFull,...
     vTimeFrameave,MAGcrossection,bnumMeanFlow,bnumStdvFlow,StdvFromMean,Planes] ...
-    = paramMap_params_new(filetype,branchList,matrix,timeMIP,vMean, ...
+    = paramMap_params_kmeans(filetype,branchList,matrix,timeMIP,vMean, ...
     BGPCdone,directory,nframes,res,MAG,IDXstart,IDXend,handles)
 %PARAMMAP_PARAMS_NEW: Create tangent planes and calculate hemodynamics
 %   Used by: loadpcvipr.m
@@ -130,7 +130,7 @@ clear N max_pts d dimIM
 
 %% Interpolation
 set(handles.TextUpdate,'String','Interpolating Data');drawnow;
-% Get interpolated velocity from 3 directions, multiply w/ tangent vector
+% Get interpolated velocity from 3 directions, multipley w/ tangent vector
 v1 = interp3(y,x,z,vMean(:,:,:,1),y_full(:),x_full(:),z_full(:),'linear',0);
 v2 = interp3(y,x,z,vMean(:,:,:,2),y_full(:),x_full(:),z_full(:),'linear',0);
 v3 = interp3(y,x,z,vMean(:,:,:,3),y_full(:),x_full(:),z_full(:),'linear',0);
@@ -160,36 +160,42 @@ set(handles.TextUpdate,'String','Performing In-Plane Segmentation');drawnow;
 area_val = zeros(size(Tangent_V,1),1);
 diam_val = zeros(size(Tangent_V,1),1);
 segmentFull = zeros([length(branchList),(width).^2]);
+SE = strel('square', 4);
 
 for n = 1:size(Tangent_V,1)
     % Get Planes and normalize
-    cdSLICE = reshape(timeMIPcrossection(n,:),[(width),(width)]);
-    temp = cdSLICE - min(cdSLICE); %shift the minimum to 0
-    cdSLICE = temp./max(temp(:)); %now normalize from 0 to 1
+    clust = horzcat(timeMIPcrossection(n,:)',vTimeFrameave(n,:)');
+    [idx,~] = kmeans(clust,2);
     
-    velSLICE = reshape(vTimeFrameave(n,:),[(width),(width)]);
-    temp = velSLICE - min(velSLICE);
-    velSLICE = temp./max(temp(:));
+    %label inside or outside
+    Lidx = numel(idx);
+    idxIM = reshape(1:Lidx,[sqrt(Lidx),sqrt(Lidx)]);
+    Bord = [idxIM(:,[1,end]),idxIM([1,end],:)'];
+    MostBord = mean(idx(Bord(:)));
+    segment = zeros([Side.*2+1,Side.*2+1]);
     
-    magSLICE = reshape(MAGcrossection(n,:),[(width),(width)]);
-    temp = magSLICE - min(magSLICE);
-    magSLICE = temp./max(temp(:));
+    % Correctly label vessel based on most values on edge of slice
+    if MostBord>1.5
+        segment(idx==1) = 1;
+    else
+        segment(idx==2) = 1;
+    end
+        
+    % Remove all segments not closest to the center
+    segment = imerode(segment,SE);     
+    s = regionprops(logical(segment),'centroid');    
+    CenterIm = [size(segment,1)/2,size(segment,2)/2];
+    Centroids = reshape([s(:).Centroid],[2,length([s(:).Centroid])/2])';
+    DisCen = sqrt(sum((Centroids - repmat(CenterIm,[size(Centroids,1),1])).^2,2));
+    [~,CenIdx]  = min(DisCen);
     
-    weightIMS = [.2 .8 .2]; % Weights = [Mag CD Vel]
-    weightIMAGE = (weightIMS(1).*magSLICE) + (weightIMS(2).*cdSLICE) + (weightIMS(3).*velSLICE);
-    
-    step = 0.001;
-    UPthresh = 0.8;
-    SMf = 90; %smoothing factor
-    shiftHM_flag = 0; %do not shift by FWHM
-    medFilt_flag = 1; %flag for median filtering of CD image
-    [~,segment] = slidingThreshold(weightIMAGE,step,UPthresh,SMf,shiftHM_flag,medFilt_flag);
-    areaThresh = round(sum(segment(:)).*0.05); %minimum area to keep
-    conn = 6; %connectivity (i.e. 6-pt)
-    segment = bwareaopen(segment,areaThresh,conn); %inverse fill holes
-    erodeFactor = 2;
-    segment = imerode(segment,strel('disk',erodeFactor)); %erode segmentation
-    
+    % Fill in the holes and clean up
+    [L,Num] = bwlabel(segment);
+    LabUse = 1:Num;
+    segment = L==LabUse(CenIdx);
+    segment = imdilate(segment, SE);
+    segment = imfill(segment,'holes');
+
     % Can compare in-plane segmentation to initial global segmentation. 
     % To do this, the 'segment' variable from 'loadpcvipr' needs to be 
     % passed as an arg. I did this by adding 'segment_old' as 2nd input
@@ -205,12 +211,6 @@ for n = 1:size(Tangent_V,1)
     Centroids = reshape([s(:).Centroid],[2,length([s(:).Centroid])/2])';
     DisCen = sqrt(sum((Centroids - repmat(CenterIm,[size(Centroids,1),1])).^2,2));
     [~,CenIdx]  = min(DisCen); %find centroid closest to center
-
-    % Fill in the holes and clean up
-    [L,Num] = bwlabel(segment); %find centroid index
-    LabUse = 1:Num;
-    segment = L==LabUse(CenIdx); %cut out other centroids
-    %segment = imopen(segment,ones(3,3)); %morphological opening
     
     % Vessel area measurements
     dArea = (res/10)^2; %pixel size (cm^2)
