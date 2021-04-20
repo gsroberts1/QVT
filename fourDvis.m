@@ -176,7 +176,7 @@ handles.c = colorbar; %save colorbar in handle
 handles.c.Color = [1 1 1]; %white
 handles.c.LineWidth = 3; %width of colorbar
 handles.c.FontSize = 20; %size of units displayed
-ylabel(handles.c,'Velocity cm/sec') %colorbar caption
+ylabel(handles.c,'Velocity mm/s') %colorbar caption
 set(handles.c,'visible','off') %turn off initially
 
 handles.cMIN = min(handles.mags); %save min vector magnit. as colorbar min
@@ -686,7 +686,7 @@ handles.c = colorbar;
 handles.c.Color = [1 1 1];
 handles.c.LineWidth = 3;
 handles.c.FontSize = 20;
-ylabel(handles.c, 'Velocity cm/sec')
+ylabel(handles.c, 'Velocity mm/s')
 
 guidata(hObject, handles);
 
@@ -752,7 +752,7 @@ handles.c = colorbar;
 handles.c.Color = [1 1 1];
 handles.c.LineWidth = 3;
 handles.c.FontSize = 20;
-ylabel(handles.c, 'Velocity cm/sec')
+ylabel(handles.c, 'Velocity mm/s')
 guidata(hObject, handles);
 
 % --- Executes during object creation, after setting all properties.
@@ -831,7 +831,7 @@ if ~isempty(IDuse)
     handles.c.Color = [1 1 1];
     handles.c.LineWidth = 3;
     handles.c.FontSize = 20;
-    ylabel(handles.c,'Velocity cm/sec')
+    ylabel(handles.c,'Velocity mm/s')
 
     set(handles.q,'visible','on')
     set(handles.c,'visible','on')

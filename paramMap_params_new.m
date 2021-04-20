@@ -187,7 +187,7 @@ for n = 1:size(Tangent_V,1)
     areaThresh = round(sum(segment(:)).*0.05); %minimum area to keep
     conn = 6; %connectivity (i.e. 6-pt)
     segment = bwareaopen(segment,areaThresh,conn); %inverse fill holes
-    erodeFactor = 1;
+    erodeFactor = 2;
     segment = imerode(segment,strel('disk',erodeFactor)); %erode segmentation
     % Can compare in-plane segmentation to initial global segmentation. 
     % To do this, the 'segment' variable from 'loadpcvipr' needs to be 
