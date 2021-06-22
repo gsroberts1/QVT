@@ -653,7 +653,7 @@ Labels = [Labels,0,0]; %neighboring CL points (including current)
 CLpoint = find(branchList(pindex,5)==branchActual)-1; %current CL point
 
 % Check if Max Velocity of current 5 planes is less than 80 cm/s
-if sum(maxVel>VENC)==0
+if sum(maxVel>VENC*0.1)==0
     MaxVel = 'YES';
 else
     MaxVel = 'NO';
