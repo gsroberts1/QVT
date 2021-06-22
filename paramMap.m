@@ -123,7 +123,7 @@ if  fileIndx > 1  %if a pre-processed case is selected
     SavePath = [directory filesep SummaryName];
     
     % Create excel files save summary data
-    col_header = ({'Vessel Label', 'Centerline Point', 'Notes', 'Max Velocity < 80cm/s', ...
+    col_header = ({'Vessel Label', 'Centerline Point', 'Notes',['Max Velocity < ' num2str(Venc) 'cm/s'], ...
         'Mean Flow ml/s','Pulsatility Index','Branch Number'});
     xlwrite([SavePath filesep 'SummaryParamTool.xls'],col_header,'Summary_Centerline','A1');
     xlwrite([SavePath filesep 'SummaryParamTool.xls'],get(handles.NamePoint,'String'),'Summary_Centerline','A2');
@@ -251,7 +251,7 @@ else
         
     % Create excel files save summary data
     col_header = ({'Vessel Label', 'Centerline Point', 'Notes', ...
-        'Max Velocity < 80cm/s','Mean Flow ml/s','Pulsatility Index','Branch Label'});
+        ['Max Velocity < ' num2str(Venc) 'cm/s'],'Mean Flow ml/s','Pulsatility Index','Branch Label'});
     xlwrite([SavePath filesep 'SummaryParamTool.xls'],col_header,'Summary_Centerline','A1');
     xlwrite([SavePath filesep 'SummaryParamTool.xls'],get(handles.NamePoint,'String'),'Summary_Centerline','A2');
     
@@ -652,7 +652,7 @@ end
 Labels = [Labels,0,0]; %neighboring CL points (including current)
 CLpoint = find(branchList(pindex,5)==branchActual)-1; %current CL point
 
-% Check if Max Velocity of current 5 planes is less than 80 cm/s
+% Check if Max Velocity of current 5 planes is less than Venc
 if sum(maxVel>VENC*0.1)==0
     MaxVel = 'YES';
 else
