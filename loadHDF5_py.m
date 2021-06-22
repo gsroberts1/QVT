@@ -9,13 +9,13 @@ function [nframes,matrix,res,timeres,VENC,area_vol,diam_vol,flowPerHeartCycle_vo
 %   feature_extraction.m, paramMap_params_new.m, makeITPlane.m, slidingThreshold.m
 
 %% Read HDF5
-filetype = 'hdf5';
-set(handles.TextUpdate,'String','Loading .HDF5 Data'); drawnow;
+filetype = 'hdf5_reg';
+set(handles.TextUpdate,'String','Loading .HDF5 REG Data'); drawnow;
 %cd = h5read(fullfile(directory,'Flow.h5'),'/ANGIO');
-mag = h5read(fullfile(directory,'Flow.h5'),'/MAG');
-vx = h5read(fullfile(directory,'Flow.h5'),'/VX');
-vy = h5read(fullfile(directory,'Flow.h5'),'/VY');
-vz = h5read(fullfile(directory,'Flow.h5'),'/VZ');
+mag = h5read(fullfile(directory,'Flow_reg.h5'),'/MAG_reg');
+vx = h5read(fullfile(directory,'Flow_reg.h5'),'/VX_reg');
+vy = h5read(fullfile(directory,'Flow_reg.h5'),'/VY_reg');
+vz = h5read(fullfile(directory,'Flow_reg.h5'),'/VZ_reg');
 
 matrix(1) = size(mag,1);                 
 matrix(2) = size(mag,2);
@@ -31,41 +31,12 @@ V(:,:,:,3) = mean(vz,4)*10;
 
 clear mag vx vy vz
 
-%% Reads PCVIPR Header
-fid = fopen([directory filesep 'pcvipr_header.txt'], 'r');
-delimiter = ' ';
-formatSpec = '%s%s%[^\n\r]'; %read 2 strings(%s%s),end line(^\n),new row(r)
-% Info from headers are placed in dataArray, 1x2 cell array.
-dataArray = textscan(fid, formatSpec, 'Delimiter', delimiter, ...
-    'MultipleDelimsAsOne', true, 'ReturnOnError', false);
-fclose(fid);
-
-% Converts value column from strings to structure with nums.
-dataArray{1,2} = cellfun(@str2num,dataArray{1,2}(:), 'UniformOutput', false);
-pcviprHeader = cell2struct(dataArray{1,2}(:), dataArray{1,1}(:), 1);
-
+%% Reads PCVIPR Header (there is none, currently hard coded)
 %%%% SPATIAL RESOLUTION ASSUMED TO BE ISOTROPIC (PCVIPR)
-timeres = pcviprHeader.timeres; %temporal resolution (ms)
-res = nonzeros(abs([pcviprHeader.ix,pcviprHeader.iy,pcviprHeader.iz])); %spatial res (mm)
-VENC = pcviprHeader.VENC;
-
-%% Reads Data Header
-% Checks if automatic background phase correction was performed in recon
-fid = fopen([directory filesep 'data_header.txt'], 'r');
-if fid>0
-    dataHeader = textscan(fid, formatSpec, 'Delimiter', delimiter, ...
-        'MultipleDelimsAsOne', true, 'ReturnOnError', false);
-    fclose(fid);
-    bgpcIdx = find(contains(dataHeader{1,1},'automatic_BGPC_flag'));
-    if isempty(bgpcIdx)
-        BGPCdone = 0;
-    else
-        BGPCdone = dataHeader{1,2}{bgpcIdx};
-        BGPCdone = str2double(BGPCdone);
-    end 
-else
-    BGPCdone = 0; %assume automatic backg. phase corr. wasnt done in recon
-end 
+timeres = 4.3; %temporal resolution (s)
+res = 1.7188; %spatial res (mm)
+VENC = 800;
+BGPCdone = 0; %assume automatic backg. phase corr. wasnt done in recon
 
   
 %% Auto crop images (from MAG data)
@@ -106,7 +77,7 @@ newDIM = size(MAG);
 vMean = zeros(newDIM(1),newDIM(2),newDIM(3),3,'single'); 
 % Looped reading of average velocity data.
 for n = 1:3
-    vMean(:,:,:,n) = V(IDXstart(1):IDXend(1),IDXstart(2):IDXend(2),IDXstart(3):IDXend(3)); %typo at end missing n
+    vMean(:,:,:,n) = V(IDXstart(1):IDXend(1),IDXstart(2):IDXend(2),IDXstart(3):IDXend(3),n); %typo at end missing n
 end
 
 %% Manual Background Phase Correction (if necessary)
@@ -172,7 +143,9 @@ imageData.MAG = MAG;
 imageData.CD = timeMIP; 
 imageData.V = vMean;
 imageData.Segmented = segment;
-imageData.pcviprHeader = pcviprHeader;
+imageData.gating_rr = "nan";
+imageData.gating_hr = "nan";
+imageData.gating_var = "nan";
 
 %% Feature Extraction
 % Get trim and create the centerline data
