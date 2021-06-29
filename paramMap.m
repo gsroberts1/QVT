@@ -122,8 +122,9 @@ if  fileIndx > 1  %if a pre-processed case is selected
     mkdir( directory , SummaryName);
     SavePath = [directory filesep SummaryName];
     
+    VENC = data_struct.VENC;
     % Create excel files save summary data
-    col_header = ({'Vessel Label', 'Centerline Point', 'Notes',['Max Velocity < ' num2str(Venc) 'cm/s'], ...
+    col_header = ({'Vessel Label', 'Centerline Point', 'Notes',['Max Velocity < ' num2str(VENC) 'cm/s'], ...
         'Mean Flow ml/s','Pulsatility Index','Branch Number'});
     xlwrite([SavePath filesep 'SummaryParamTool.xls'],col_header,'Summary_Centerline','A1');
     xlwrite([SavePath filesep 'SummaryParamTool.xls'],get(handles.NamePoint,'String'),'Summary_Centerline','A2');
@@ -139,7 +140,6 @@ if  fileIndx > 1  %if a pre-processed case is selected
     matrix = data_struct.matrix; %image matrix size (pixels)
     res = data_struct.res; %image resolution (mm)
     timeres = data_struct.timeres; %temporal resolution (ms)
-    VENC = data_struct.VENC;
     segment = data_struct.segment; %binary mask (angiogram)
     PI_vol = data_struct.PI_vol; %pulsatility index
     RI_vol = data_struct.RI_vol; %resistivity index
@@ -251,7 +251,7 @@ else
         
     % Create excel files save summary data
     col_header = ({'Vessel Label', 'Centerline Point', 'Notes', ...
-        ['Max Velocity < ' num2str(Venc) 'cm/s'],'Mean Flow ml/s','Pulsatility Index','Branch Label'});
+        ['Max Velocity < ' num2str(VENC) 'cm/s'],'Mean Flow ml/s','Pulsatility Index','Branch Label'});
     xlwrite([SavePath filesep 'SummaryParamTool.xls'],col_header,'Summary_Centerline','A1');
     xlwrite([SavePath filesep 'SummaryParamTool.xls'],get(handles.NamePoint,'String'),'Summary_Centerline','A2');
     
