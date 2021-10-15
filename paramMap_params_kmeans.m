@@ -160,7 +160,7 @@ set(handles.TextUpdate,'String','Performing In-Plane Segmentation');drawnow;
 area_val = zeros(size(Tangent_V,1),1);
 diam_val = zeros(size(Tangent_V,1),1);
 segmentFull = zeros([length(branchList),(width).^2]);
-SE = strel('square',4);
+SE = strel('square',3);
 %viscosity = .0045;      % in kg/(m s^)
 
 for n = 1:size(Tangent_V,1)
@@ -184,7 +184,6 @@ for n = 1:size(Tangent_V,1)
     end
         
     % Remove all segments not closest to the center
-    SE = strel('square',3);
     segment = imerode(segment,SE);     
     s = regionprops(logical(segment),'centroid');    
     CenterIm = [size(segment,1)/2,size(segment,2)/2];
@@ -217,10 +216,10 @@ for n = 1:size(Tangent_V,1)
     
     % Vessel area measurements
     dArea = (res/10)^2; %pixel size (cm^2)
-    area_valK(n,1) = sum(segment(:))*dArea*((2*r+1)/(2*r*InterpVals+1))^2;
+    area_val(n,1) = sum(segment(:))*dArea*((2*r+1)/(2*r*InterpVals+1))^2;
     %area_valK = area_valK';
     
-    segmentFullK(n,:) = segment(:);
+    segmentFull(n,:) = segment(:);
     
     % New with ratios of areas. Ratio of smallest inner circle over
     % largest encompassing outer circle (assume circular area). Measure of
@@ -230,8 +229,8 @@ for n = 1:size(Tangent_V,1)
     [xLoc,yLoc] = find(bwperim(segment)); %get perimeter
     D = pdist2([xLoc,yLoc],[xLoc,yLoc]); %distance b/w perimeter points
     Rout = max(D(:))/2; %radius of largest outer circle
-    diam_valK(n,1) = Rin^2/Rout^2; %ratio of areas
-    diam_valK(diam_valK==inf) = 0;
+    diam_val(n,1) = Rin^2/Rout^2; %ratio of areas
+    diam_val(diam_val==inf) = 0;
     %diam_valK = diam_valK';
     %diam_val(n) = 2*sqrt(area_val(n)/pi); %equivalent diameter
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%

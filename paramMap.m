@@ -551,128 +551,6 @@ index_range(index_range<1) = [];
 index_range(index_range>size(branchList,1)) = [];
 index_range(Logical_branch(index_range)) = [];
 
-%%%%%%% SLIDING THRESHOLD %%%%%%%
-% Time-averaged data
-area = area_val(index_range);
-area = [area;mean(area);std(area)];
-diam = diam_val(index_range);
-diam = [diam;mean(diam);std(diam)];
-flowPerHeartCycle = flowPerHeartCycle_val(index_range);
-flowPerHeartCycle = [flowPerHeartCycle;mean(flowPerHeartCycle);std(flowPerHeartCycle)];
-PI = PI_val(index_range) ;
-PI = [PI;mean(PI);std(PI)];
-maxVel = maxVel_val(index_range);
-maxVel = [maxVel;mean(maxVel);std(maxVel)];
-meanVel = velMean_val(index_range);
-meanVel = [meanVel;mean(meanVel);std(meanVel)];
-RI = RI_val(index_range);
-RI = [RI;mean(RI);std(RI)];
-
-% Time-resolved flow
-flowPulsatile = flowPulsatile_val(index_range,:);
-flowPulsatile = [flowPulsatile;mean(flowPulsatile,1);std(flowPulsatile,1)];
-
-% Collect branch name and Labels
-savename = PointLabel; %name of current vessel
-warning('off','MATLAB:xlswrite:AddSheet') %shut off excel sheet warning
-Labels = zeros(1,length(index_range));
-
-% Current and neighboring centerline points along branch
-for n = 1:length(index_range)
-    branchActual = branchList(branchList(:,4) == bnum,5);
-    Labels(n) = find(branchList(index_range(n),5)==branchActual)-1;
-end
-Labels = [Labels,0,0]; %neighboring CL points (including current)
-CLpoint = find(branchList(pindex,5)==branchActual)-1; %current CL point
-
-% Check if Max Velocity of current 5 planes is less than VENC
-if sum(maxVel>VENC*0.1)==0
-    MaxVel = 'YES';
-else
-    MaxVel = 'NO';
-end
-
-if isempty(allNotes{get(handles.NamePoint,'Value')+1})
-    Notes = get(handles.NoteBox,'String'); %get any notes from notebox
-    SummaryInfo = {CLpoint,Notes,MaxVel,flowPerHeartCycle(end-1),PI(end-1),bnum};
-    xlwrite([SavePath filesep 'SummaryParamTool.xls'],SummaryInfo,'Summary_Centerline',SaveRow);
-    set(handles.TextUpdate,'String','Saving Data..');drawnow;
-end 
-
-% save time-averaged
-col_header = ({'Point along Vessel', 'Area (cm^2)', 'Area Ratio', 'Max Velocity (cm/s)',...
-    'Mean Velocity (cm/s)','Average Flow(mL/s)','Pulsatility Index','Resistivity Index'});
-time_avg = vertcat(col_header,num2cell(real(horzcat(Labels',...
-    area,diam,maxVel,meanVel,flowPerHeartCycle,PI,RI))));
-time_avg{end-1,1} = 'Mean';
-time_avg{end,1} = 'Standard Deviation';
-xlwrite([SavePath filesep 'SummaryParamTool.xls'],time_avg,[savename '_T_averaged']);
-set(handles.TextUpdate,'String','Saving Data...');drawnow;
-
-% save time-resolved
-spaces = repmat({''},1,nframes-1);
-col_header2 = ({'Cardiac Time (ms)'});
-col_header3 = horzcat({'Point along Vessel','Flow (mL/s)'},spaces);
-col_header2 = horzcat(col_header2, num2cell(real(timeres/1000*linspace(1,nframes,nframes))));
-time_resolve = vertcat(col_header2, col_header3, num2cell(real(horzcat(Labels',flowPulsatile))));
-time_resolve{end-1,1} = 'Mean';
-time_resolve{end,1} = 'Standard Deviation';
-xlwrite([SavePath filesep 'SummaryParamTool.xls'],time_resolve,[savename '_T_resolved']);
-set(handles.TextUpdate,'String','Saving Data....');drawnow;
-
-% Save: interactive window, main GUI , and cross-section images as montage
-fig.Color = 'black';
-fig.InvertHardcopy = 'off';
-img = getframe(fig);
-imwrite(img.cdata, [ SavePath filesep savename '_3dview.jpg']);
-
-fig2 = handles.ParameterTool;
-fig2.Color = [0.94,0.94,0.94];
-fig2.InvertHardcopy = 'off';
-saveas(fig2,[ SavePath filesep savename '_GUIview.jpg'])
-set(handles.TextUpdate,'String','Saving Data.....');drawnow;
-
-% Get the dimensions of the sides of the slices created
-imdim = sqrt(size(segmentFull,2));
-
-% Get the cross sections for all points for branch
-BranchSlice = segmentFull(index_range,:); %Restricts for branch edges
-cdSlice = timeMIPcrossection(index_range,:);
-velSlice = vTimeFrameave(index_range,:);
-magSlice = MAGcrossection(index_range,:);
-
-subL = size(BranchSlice,1);
-f1 = figure('Position',[100,100,700,700],'Visible','off');
-FinalImage = zeros(imdim,imdim,1,3*subL);
-temp = 1;
-
-%Put all images into a single image for saving cross sectional data
-for q = 1:subL
-    % Create some images of the cross section that is used
-    CDcross = cdSlice(q,:);
-    CDcross = reshape(CDcross,imdim,imdim)./max(CDcross);
-    Vcross = velSlice(q,:);
-    Vcross = reshape(Vcross,imdim,imdim)./max(Vcross);
-    Magcross = magSlice(q,:);
-    Magcross = reshape(Magcross,imdim,imdim)./max(Magcross);
-    Maskcross = BranchSlice(q,:);
-    Maskcross = reshape(Maskcross,imdim,imdim);
-    
-    % Put all images into slices
-    FinalImage(:,:,1,temp) = Magcross;
-    FinalImage(:,:,1,temp+1) = CDcross;
-    FinalImage(:,:,1,temp+2) = Vcross;
-    FinalImage(:,:,1,temp+3) = Maskcross;
-    temp = temp+4;
-end
-subplot('position', [0 0 1 1])
-montage(FinalImage, 'Size', [subL 4]);
-saveas(f1,[ SavePath filesep savename '_Slicesview.jpg'])
-close(f1)
-set(handles.TextUpdate,'String','Saving Data......');drawnow;
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
 %%%%%%%%%%%% KMEANS %%%%%%%%%%%%%%
 % Time-averaged data
 area = area_val(index_range);
@@ -719,6 +597,7 @@ if isempty(allNotes{get(handles.NamePoint,'Value')+1})
     SummaryInfo = {CLpoint,Notes,MaxVel,flowPerHeartCycle(end-1),PI(end-1),bnum};
     xlwrite([SavePath filesep 'SummaryParamTool.xls'],SummaryInfo,'Summary_Centerline',SaveRow);
 end 
+set(handles.TextUpdate,'String','Saving Data..');drawnow;
 
 % save time-averaged
 col_header = ({'Point along Vessel', 'Area (cm^2)', 'Area Ratio', 'Max Velocity (cm/s)',...
@@ -728,6 +607,7 @@ time_avg = vertcat(col_header,num2cell(real(horzcat(Labels',...
 time_avg{end-1,1} = 'Mean';
 time_avg{end,1} = 'Standard Deviation';
 xlwrite([SavePath filesep 'SummaryParamTool.xls'],time_avg,[savename '_T_averaged']);
+set(handles.TextUpdate,'String','Saving Data...');drawnow;
 
 % save time-resolved
 spaces = repmat({''},1,nframes-1);
@@ -738,6 +618,19 @@ time_resolve = vertcat(col_header2, col_header3, num2cell(real(horzcat(Labels',f
 time_resolve{end-1,1} = 'Mean';
 time_resolve{end,1} = 'Standard Deviation';
 xlwrite([SavePath filesep 'SummaryParamTool.xls'],time_resolve,[savename '_T_resolved']);
+set(handles.TextUpdate,'String','Saving Data....');drawnow;
+
+% Save: interactive window, main GUI , and cross-section images as montage
+fig.Color = 'black';
+fig.InvertHardcopy = 'off';
+img = getframe(fig);
+imwrite(img.cdata, [ SavePath filesep savename '_3dview.jpg']);
+
+fig2 = handles.ParameterTool;
+fig2.Color = [0.94,0.94,0.94];
+fig2.InvertHardcopy = 'off';
+saveas(fig2,[ SavePath filesep savename '_GUIview.jpg'])
+set(handles.TextUpdate,'String','Saving Data.....');drawnow;
 
 % Get the dimensions of the sides of the slices created
 imdim = sqrt(size(segmentFull,2));
@@ -779,7 +672,7 @@ close(f1)
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 set(handles.NoteBox,'String',' ');
-set(handles.TextUpdate,'String','Please select a new point for analysis');drawnow;
+set(handles.TextUpdate,'String','Please select new point for analysis');drawnow;
 NamePoint_Callback(hObject, eventdata, handles)
 
 
