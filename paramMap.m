@@ -23,11 +23,11 @@ function varargout = paramMap(varargin)
 %
 % See also: GUIDE, GUIDATA, GUIHANDLES
 % Edit the above text to modify the response to help paramMap
-% Last Modified by GUIDE v2.5 20-Jan-2021 13:56:22
+% Last Modified by GUIDE v2.5 23-Aug-2021 09:13:02
 
 % Developed by Carson Hoffman, University of Wisconsin-Madison 2019
 %   Used by: NONE (START FILE)
-%   Dependencies: loadpcvipr.m, updateVcrossTR.m, myupdatefcn.m
+%   Dependencies: loadpcvipr.m
 
 
 % Begin initialization code - DO NOT EDIT
@@ -83,12 +83,13 @@ guidata(hObject, handles);
 
 % Create global namespace
 global branchList Planes hfull p branchLabeled Ntxt nframes res matrix VENC
-global directory AveAreaBranch LogPoints fullCData area_vol flowPerHeartCycle_vol
-global PI_vol diam_vol maxVel_vol RI_vol flowPulsatile_vol timeres segment
-global r timeMIPcrossection segment1 vTimeFrameave velMean_val versionNum
+global directory AveAreaBranch LogPoints fullCData area_val flowPerHeartCycle_val
+global PI_val diam_val maxVel_val RI_val flowPulsatile_val timeres segment
+global r timeMIPcrossection segmentFull vTimeFrameave velMean_val versionNum
 global dcm_obj fig hpatch hscatter Labeltxt cbar hDataTip SavePath
 global MAGcrossection bnumMeanFlow bnumStdvFlow StdvFromMean
 global VplanesAllx VplanesAlly VplanesAllz imageData caseFilePath
+global vesselsAnalyzed allNotes
 
 % Initial Variables
 hfull = handles;
@@ -97,6 +98,8 @@ branchLabeled = 0; %used in cursor updatefunction
 Ntxt = []; %used in cursor updatefunction
 p = []; %used in cursor updatefunction
 directory = uigetdir; %interactive directory selection
+vesselsAnalyzed = {};
+allNotes = cell(length(get(handles.NamePoint,'String')),1);
 
 % Creates list of all .mat files in selected directory
 d = dir([directory filesep '*.mat']);
@@ -109,20 +112,20 @@ if  fileIndx > 1  %if a pre-processed case is selected
     
     set(handles.TextUpdate,'String','Loading Preprocessed Data'); drawnow;
     caseFilePath = [directory filesep fn{fileIndx}];
+
     load(caseFilePath,'data_struct') %load data_struct
     load(caseFilePath,'Vel_Time_Res') %load data_struct
-    
+
     % This will be the name used for the Excel file
     finalFolder = regexp(directory,filesep,'split');
     SummaryName = fn{fileIndx};
     SummaryName = [finalFolder{end} '_' SummaryName(1:end-4)];
-    
-    % Makes directory if it does already exist
+
+    % Makes directory if it does already exist (folder is time-stamped)
     warning off
-    mkdir( directory , SummaryName);
+    mkdir(directory,SummaryName);
     SavePath = [directory filesep SummaryName];
-    
-    VENC = data_struct.VENC;
+
     % Create excel files save summary data
     col_header = ({'Vessel Label', 'Centerline Point', 'Notes',['Max Velocity < ' num2str(VENC) 'cm/s'], ...
         'Mean Flow ml/s','Pulsatility Index','Branch Number'});
@@ -130,66 +133,48 @@ if  fileIndx > 1  %if a pre-processed case is selected
     xlwrite([SavePath filesep 'SummaryParamTool.xls'],get(handles.NamePoint,'String'),'Summary_Centerline','A2');
     
     % New Data Structure
-    area_vol = data_struct.area_vol; %area of vessels
-    diam_vol = data_struct.diam_vol; %diameter of vessels
+    area_val = data_struct.area_val; %area of vessels
+    diam_val = data_struct.diam_val; %diameter of vessels
     branchList = data_struct.branchList; %point locations/labelings
-    flowPerHeartCycle_vol = data_struct.flowPerHeartCycle_vol; %TA flow
-    maxVel_vol = data_struct.maxVel_vol; %TA max velocities
+    flowPerHeartCycle_val = data_struct.flowPerHeartCycle_val; %TA flow
+    maxVel_val = data_struct.maxVel_val; %TA max velocities
     velMean_val = data_struct.velMean_val; %TA mean velocities
     nframes = data_struct.nframes; %number of temporal cardiac frames
     matrix = data_struct.matrix; %image matrix size (pixels)
     res = data_struct.res; %image resolution (mm)
     timeres = data_struct.timeres; %temporal resolution (ms)
+    VENC = data_struct.VENC;
     segment = data_struct.segment; %binary mask (angiogram)
-    PI_vol = data_struct.PI_vol; %pulsatility index
-    RI_vol = data_struct.RI_vol; %resistivity index
-    flowPulsatile_vol = data_struct.flowPulsatile_vol; %TR flow
+    PI_val = data_struct.PI_val; %pulsatility index
+    RI_val = data_struct.RI_val; %resistivity index
+    flowPulsatile_val = data_struct.flowPulsatile_val; %TR flow
     r = data_struct.r; %radius of plane (plane size=(2*r)+1)
     timeMIPcrossection = data_struct.timeMIPcrossection; %complex diff.
     MAGcrossection = data_struct.MAGcrossection; %magnitude (in-plane)
-    segment1 = data_struct.segment1; %cross-sectional plane masks
+    segmentFull = data_struct.segmentFull; %cross-sectional plane masks
     vTimeFrameave = data_struct.vTimeFrameave; %velocity (in-plane)
     Planes = data_struct.Planes; %outer coordinates of plane
     bnumMeanFlow = data_struct.bnumMeanFlow; %mean flow along branches
     bnumStdvFlow = data_struct.bnumStdvFlow; %stdv flow of branches
     StdvFromMean = data_struct.StdvFromMean; %CoV along branches
-    
+
     VplanesAllx = Vel_Time_Res.VplanesAllx; %TR vel planes (uninterped)
     VplanesAlly = Vel_Time_Res.VplanesAlly;
     VplanesAllz = Vel_Time_Res.VplanesAllz;
     
+    
     set(handles.TextUpdate,'String','Loading Complete'); drawnow;
     pause(1)
     set(handles.TextUpdate,'String','Please Select Analysis Plane Location'); drawnow;
+
 else
     %Load in pcvipr data from scratch
-    if isfile(fullfile(directory,'Flow_reg.h5'))
-                
-        [nframes,matrix,res,timeres,VENC,area_vol,diam_vol,flowPerHeartCycle_vol, ...
-            maxVel_vol,PI_vol,RI_vol,flowPulsatile_vol,velMean_val, ...
-            VplanesAllx,VplanesAlly,VplanesAllz,Planes,branchList,segment,r, ...
-            timeMIPcrossection,segment1,vTimeFrameave,MAGcrossection, imageData, ...
-            bnumMeanFlow,bnumStdvFlow,StdvFromMean] ...
-            = loadHDF5_py(directory,handles);
-        
-    elseif isfile(fullfile(directory,'Flow.h5'))
-        
-        [nframes,matrix,res,timeres,VENC,area_vol,diam_vol,flowPerHeartCycle_vol, ...
-            maxVel_vol,PI_vol,RI_vol,flowPulsatile_vol,velMean_val, ...
-            VplanesAllx,VplanesAlly,VplanesAllz,Planes,branchList,segment,r, ...
-            timeMIPcrossection,segment1,vTimeFrameave,MAGcrossection, imageData, ...
-            bnumMeanFlow,bnumStdvFlow,StdvFromMean] ...
-            = loadHDF5(directory,handles);
-        
-    else
-        
-        [nframes,matrix,res,timeres,VENC,area_vol,diam_vol,flowPerHeartCycle_vol, ...
-            maxVel_vol,PI_vol,RI_vol,flowPulsatile_vol,velMean_val, ...
-            VplanesAllx,VplanesAlly,VplanesAllz,Planes,branchList,segment,r, ...
-            timeMIPcrossection,segment1,vTimeFrameave,MAGcrossection, imageData, ...
-            bnumMeanFlow,bnumStdvFlow,StdvFromMean] ...
-            = loadpcvipr(directory,handles);
-    end  
+    [nframes,matrix,res,timeres,VENC,area_val,diam_val,flowPerHeartCycle_val, ...
+        maxVel_val,PI_val,RI_val,flowPulsatile_val,velMean_val, ...
+        VplanesAllx,VplanesAlly,VplanesAllz,Planes,branchList,segment,r, ...
+        timeMIPcrossection,segmentFull,vTimeFrameave,MAGcrossection, imageData, ...
+        bnumMeanFlow,bnumStdvFlow,StdvFromMean] ...
+        = loadpcvipr(directory,handles);
     
     directory = uigetdir; %select saving dir 
     % Save all variables needed to run parametertool. This will be used
@@ -201,11 +186,11 @@ else
     
     data_struct = [];
     data_struct.directory = directory;
-    data_struct.area_vol = area_vol;
-    data_struct.diam_vol = diam_vol;
+    data_struct.area_val = area_val;
+    data_struct.diam_val = diam_val;
     data_struct.branchList = branchList;
-    data_struct.flowPerHeartCycle_vol = flowPerHeartCycle_vol;
-    data_struct.maxVel_vol = maxVel_vol;
+    data_struct.flowPerHeartCycle_val = flowPerHeartCycle_val;
+    data_struct.maxVel_val = maxVel_val;
     data_struct.velMean_val = velMean_val;
     data_struct.nframes = nframes;
     data_struct.matrix = matrix;
@@ -213,13 +198,13 @@ else
     data_struct.timeres = timeres;
     data_struct.VENC = VENC;
     data_struct.segment = segment;
-    data_struct.PI_vol = PI_vol;
-    data_struct.RI_vol = RI_vol;
-    data_struct.flowPulsatile_vol = flowPulsatile_vol;
+    data_struct.PI_val = PI_val;
+    data_struct.RI_val = RI_val;
+    data_struct.flowPulsatile_val = flowPulsatile_val;
     data_struct.r = r;
     data_struct.timeMIPcrossection = timeMIPcrossection;
     data_struct.MAGcrossection = MAGcrossection;
-    data_struct.segment1 = segment1;
+    data_struct.segmentFull = segmentFull;
     data_struct.vTimeFrameave = vTimeFrameave;
     data_struct.Planes = Planes;
     data_struct.bnumMeanFlow = bnumMeanFlow;
@@ -230,6 +215,7 @@ else
     Vel_Time_Res.VplanesAlly = VplanesAlly;
     Vel_Time_Res.VplanesAllz = VplanesAllz;
     
+    
     % Saves processed data in same location as pcvipr.mat files
     caseFilePath = fullfile(directory,['pcviprData_' saveState '.mat']);
     save(caseFilePath,'data_struct','Vel_Time_Res','imageData')
@@ -238,22 +224,23 @@ else
     finalFolder = regexp(directory,filesep,'split');
     SummaryName = [finalFolder{end} '_pcviprData_' saveState];
     warning off
-    mkdir( directory , SummaryName); %makes directory if it already exists
+    mkdir(directory,SummaryName); %makes directory if it already exists
     
     % Where to save data images and excel summary files
     SavePath = [directory filesep SummaryName];
+        
+    % Create excel files save summary data
+    col_header = ({'Vessel Label', 'Centerline Point', 'Notes',['Max Velocity < ' num2str(VENC) 'cm/s'], ...
+        'Mean Flow ml/s','Pulsatility Index','Branch Label'});
+    xlwrite([SavePath filesep 'SummaryParamTool.xls'],col_header,'Summary_Centerline','A1');
+    xlwrite([SavePath filesep 'SummaryParamTool.xls'],get(handles.NamePoint,'String'),'Summary_Centerline','A2');
     
     % export gating stats 
     gating_stats = {'Median RR (ms)'; 'HR (bpm)';'Values within expected RR (%)'};
     val = [imageData.gating_rr, imageData.gating_hr, imageData.gating_var]';
     gating_table = table(gating_stats,val);
     writetable(gating_table,[SavePath filesep 'gating_stats.csv'],'Delimiter',',');
-        
-    % Create excel files save summary data
-    col_header = ({'Vessel Label', 'Centerline Point', 'Notes', ...
-        ['Max Velocity < ' num2str(VENC) 'cm/s'],'Mean Flow ml/s','Pulsatility Index','Branch Label'});
-    xlwrite([SavePath filesep 'SummaryParamTool.xls'],col_header,'Summary_Centerline','A1');
-    xlwrite([SavePath filesep 'SummaryParamTool.xls'],get(handles.NamePoint,'String'),'Summary_Centerline','A2');
+    
     
     set(handles.TextUpdate,'String','Data Successfully Saved'); drawnow;
     pause(1)
@@ -267,12 +254,12 @@ set(handles.AreaThreshSlide, 'Value',0);
 
 % Initialize visualization
 fig = figure(1); cla
-hpatch = patch(isosurface(segment,0.5),'FaceAlpha',0); %bw iso angiogram
+hpatch = patch(isosurface(permute(segment,[2 1 3]),0.5),'FaceAlpha',0); %bw iso angiogram
 reducepatch(hpatch,0.7);
 set(hpatch,'FaceColor','white','EdgeColor', 'none','PickableParts','none');
 set(gcf,'color','black');
 axis off tight
-view([-1 .1 0]);
+view([1 0 0]);
 axis vis3d
 daspect([1 1 1])
 set(gca,'zdir','reverse')
@@ -290,15 +277,15 @@ branchLabeled = 0;
 
 % This will be used in the update function for cursor text
 Labeltxt = {'Flow: ',  ' mL/s ';'Average: ',' mL/s '};
-cdata = flowPerHeartCycle_vol;
+cdata = flowPerHeartCycle_val;
 hold on
 dotSize = 25;
-hscatter = scatter3(branchList(:,2),branchList(:,1),branchList(:,3),dotSize,cdata,'filled');
+hscatter = scatter3(branchList(:,1),branchList(:,2),branchList(:,3),dotSize,cdata,'filled');
 hold off
 
 caxis([min(cdata) max(cdata)]);
 cbar = colorbar;
-caxis([0 0.8*max(flowPerHeartCycle_vol(:))])
+caxis([0 0.8*max(flowPerHeartCycle_val(:))])
 set(get(cbar,'xlabel'),'string','Flow (mL/s)','fontsize',16,'Color','white');
 set(cbar,'FontSize',16,'color','white');
 ax = gca;
@@ -308,7 +295,7 @@ zlim([ax.ZLim(1)-r ax.ZLim(2)+r])
 
 % Initialize visualization of tangent planes
 hold on
-p = fill3(Planes(1,:,2)',Planes(1,:,1)',Planes(1,:,3)',[1 0 0], ...
+p = fill3(Planes(1,:,1)',Planes(1,:,2)',Planes(1,:,3)',[1 0 0], ...
     'EdgeColor',[1 0 0],'FaceAlpha',0.3,'PickableParts','none', ...
     'Parent', fig.CurrentAxes); %fill3(pty',ptx',ptz','r') for isosurface
 hold off
@@ -326,11 +313,17 @@ updateDataCursors(dcm_obj)
 AveAreaBranch = size(max(branchList(:,4)),1);
 for n = 1:max(branchList(:,4))
     Btemp = branchList(:,4)==n;
-    AveAreaBranch(n,1) = mean(area_vol(Btemp)); %mean area of branch
+    AveAreaBranch(n,1) = mean(area_val(Btemp)); %mean area of branch
+end
+
+AveAreaBranch = size(max(branchList(:,4)),1);
+for n = 1:max(branchList(:,4))
+    Btemp = branchList(:,4)==n;
+    AveAreaBranch(n,1) = mean(area_val(Btemp)); %mean area of branch
 end
 
 LogPoints = true(size(branchList,1),1); %logical array of 1s for areaThresh
-fullCData = flowPerHeartCycle_vol; %initialize fullCData color as flow
+fullCData = flowPerHeartCycle_val; %initialize fullCData color as flow
 
 steps = [1./(nframes-1) 10./(nframes-1)]; %set so one 'slide' moves to the next slice exactly
 set(handles.VcrossTRslider,'SliderStep',steps);
@@ -338,23 +331,13 @@ set(handles.VcrossTRslider,'SliderStep',steps);
 
 % --- Outputs from this function are returned to the command line.
 function varargout = paramMap_OutputFcn(hObject, eventdata, handles)
-% varargout  cell array for returning output args (see VARARGOUT);
-% hObject    handle to figure
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-% Get default command line output from handles structure
 varargout{1} = handles.output;
 
 
 % --- Executes on selection change in parameter_choice.
 function parameter_choice_Callback(hObject, eventdata, handles)
-% hObject    handle to parameter_choice (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-% Hints: contents = cellstr(get(hObject,'String')) returns parameter_choice contents as cell array
-%        contents{get(hObject,'Value')} returns selected item from parameter_choice
-global hscatter area_vol RI_vol PI_vol dcm_obj fig velMean_val
-global flowPerHeartCycle_vol fullCData maxVel_vol cbar Labeltxt diam_vol
+global hscatter area_val RI_val PI_val dcm_obj fig velMean_val
+global flowPerHeartCycle_val fullCData maxVel_val cbar Labeltxt diam_val
 global StdvFromMean
 
 % Get parameter option
@@ -364,36 +347,36 @@ switch str{val}
     case 'Area'
         % This will be used in the update function for cursor text
         Labeltxt = {'Area: ',  ' cm^2';'Average: ',' cm^2'};
-        hscatter.CData = area_vol; %update colors on centerline display
+        hscatter.CData = area_val; %update colors on centerline display
         caxis(fig.CurrentAxes,[0 1.5*mean(hscatter.CData)])
         cl = caxis(fig.CurrentAxes);
         set(get(cbar,'xlabel'),'string','Area (cm^2)','fontsize',16,'Color','white');
         set(cbar,'FontSize',16,'color','white');
-        fullCData = area_vol;
+        fullCData = area_val;
     case 'Ratio of Areas'
         Labeltxt = {'Area Ratio: ',  ' ';'Average: ',' '};
-        hscatter.CData = diam_vol;
+        hscatter.CData = diam_val;
         caxis(fig.CurrentAxes,[min(hscatter.CData) max(hscatter.CData)]);
         cl = caxis(fig.CurrentAxes);
         set(get(cbar,'xlabel'),'string','Area Ratio','fontsize',16,'Color','white');
         set(cbar,'FontSize',16,'color','white');
-        fullCData = diam_vol;
+        fullCData = diam_val;
     case 'Total Flow'
         Labeltxt = {'Flow: ',  ' mL/s';'Average: ',' mL/s'};
-        hscatter.CData = flowPerHeartCycle_vol;
-        caxis(fig.CurrentAxes,[0 0.8*max(flowPerHeartCycle_vol(:))])
+        hscatter.CData = flowPerHeartCycle_val;
+        caxis(fig.CurrentAxes,[0 0.8*max(flowPerHeartCycle_val(:))])
         cl = caxis(fig.CurrentAxes);
         set(get(cbar,'xlabel'),'string','Flow (mL/s)','fontsize',16,'Color','white');
         set(cbar,'FontSize',16,'color','white');
-        fullCData = flowPerHeartCycle_vol;
+        fullCData = flowPerHeartCycle_val;
     case 'Maximum Velocity '
         Labeltxt = {'Max Velocity: ',  ' cm/s';'Average: ',' cm/s'};
-        hscatter.CData = maxVel_vol;
+        hscatter.CData = maxVel_val;
         caxis(fig.CurrentAxes,[min(hscatter.CData) max(hscatter.CData)])
         cl = caxis(fig.CurrentAxes);
         set(get(cbar,'xlabel'),'string','Max Velocity (cm/s)','fontsize',16,'Color','white');
         set(cbar,'FontSize',16,'color','white');
-        fullCData = maxVel_vol;
+        fullCData = maxVel_val;
     case 'Mean Velocity'
         Labeltxt = {'Mean Velocity: ',  ' cm/s';'Average: ',' cm/s'};
         hscatter.CData = velMean_val;
@@ -412,20 +395,20 @@ switch str{val}
         fullCData = StdvFromMean;
     case 'Resistance Index'
         Labeltxt = {'Resistance Index: ',  ' ';'Average: ',' '};
-        hscatter.CData = RI_vol;
+        hscatter.CData = RI_val;
         caxis(fig.CurrentAxes,[-0.5 1])
         cl = caxis(fig.CurrentAxes);
         set(get(cbar,'xlabel'),'string','Resistance Index','fontsize',16,'Color','white');
         set(cbar,'FontSize',16,'color','white');
-        fullCData = RI_vol;
+        fullCData = RI_val;
     case str{val}
         Labeltxt = {'Pulsatility Index: ',  ' ';'Average: ',' '};
-        hscatter.CData = PI_vol;
+        hscatter.CData = PI_val;
         caxis(fig.CurrentAxes,[0 2])
         cl = caxis(fig.CurrentAxes);
         set(get(cbar,'xlabel'),'string','Pulsatility Index','fontsize',16,'Color','white');
         set(cbar,'FontSize',16,'color','white');
-        fullCData = PI_vol;
+        fullCData = PI_val;
 end
 
 set(handles.CBARmin,'String',num2str(cl(1)))
@@ -436,11 +419,6 @@ updateDataCursors(dcm_obj)
 
 % --- Executes during object creation, after setting all properties.
 function parameter_choice_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to parameter_choice (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-% Hint: popupmenu controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
@@ -448,18 +426,10 @@ end
 
 % --- Executes during object creation, after setting all properties.
 function plot_flowWaveform_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to plot_flowwaveform (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
 
 
 % --- Executes on slider movement.
 function Transparent_Callback(hObject, eventdata, handles)
-% hObject    handle to Transparent (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-% Hints: get(hObject,'Value') returns position of slider
-%        get(hObject,'Min') and get(hObject,'Max') to determine range of slider
 global hpatch Sval
 
 Sval = get(hObject,'Value');
@@ -467,10 +437,6 @@ set(hpatch,'FaceAlpha',Sval);
 
 % --- Executes during object creation, after setting all properties.
 function Transparent_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to Transparent (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-% Hint: slider controls usually have a light gray background.
 global Sval
 
 if isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
@@ -483,11 +449,6 @@ Sval = get(hObject,'Value');
 
 
 function CBARmin_Callback(hObject, eventdata, handles)
-% hObject    handle to CBARmin (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-% Hints: get(hObject,'String') returns contents of CBARmin as text
-%        str2double(get(hObject,'String')) returns contents of CBARmin as a double
 global fig
 
 maxV = str2double(get(handles.CBARmax,'String'));
@@ -496,22 +457,12 @@ caxis(fig.CurrentAxes,[minV maxV])
 
 % --- Executes during object creation, after setting all properties.
 function CBARmin_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to CBARmin (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
 
 
 function CBARmax_Callback(hObject, eventdata, handles)
-% hObject    handle to CBARmax (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-% Hints: get(hObject,'String') returns contents of CBARmax as text
-%        str2double(get(hObject,'String')) returns contents of CBARmax as a double
 global fig
 
 maxV =   str2double(get(handles.CBARmax,'String'));
@@ -520,11 +471,6 @@ caxis(fig.CurrentAxes,[minV maxV])
 
 % --- Executes during object creation, after setting all properties.
 function CBARmax_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to CBARmax (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
@@ -532,11 +478,6 @@ end
 
 % --- Executes on selection change in CBARselection.
 function CBARselection_Callback(hObject, eventdata, handles)
-% hObject    handle to CBARselection (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-% Hints: contents = cellstr(get(hObject,'String')) returns CBARselection contents as cell array
-%        contents{get(hObject,'Value')} returns selected item from CBARselection
 global fig
 
 contents = cellstr(get(hObject,'String')); %turn color options to cells
@@ -544,11 +485,6 @@ colormap(fig.Children(end),contents{get(hObject,'Value')})
 
 % --- Executes during object creation, after setting all properties.
 function CBARselection_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to CBARselection (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-% Hint: popupmenu controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
@@ -556,24 +492,19 @@ end
 
 % --- Executes on selection change in NamePoint.
 function NamePoint_Callback(hObject, eventdata, handles)
-% hObject    handle to NamePoint (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-% Hints: contents = cellstr(get(hObject,'String')) returns NamePoint contents as cell array
-%        contents{get(hObject,'Value')} returns selected item from NamePoint
-global PointLabel dcm_obj
+global PointLabel dcm_obj vesselsAnalyzed
 
-contents = cellstr(get(hObject,'String'));
-PointLabel = contents{get(hObject,'Value')};
+contents = cellstr(get(handles.NamePoint,'String'));
+PointLabel = contents{get(handles.NamePoint,'Value')};
+if sum(contains(vesselsAnalyzed,PointLabel))
+    set(handles.NamePoint,'ForegroundColor',[0.6 0.6 0.6]);
+else
+    set(handles.NamePoint,'ForegroundColor',[0 0 0]);
+end 
 updateDataCursors(dcm_obj)
 
 % --- Executes during object creation, after setting all properties.
 function NamePoint_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to NamePoint (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-% Hint: popupmenu controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
@@ -585,15 +516,16 @@ PointLabel = contents{get(hObject,'Value')};
 
 % --- Executes on button press in SavePoint.
 function SavePoint_Callback(hObject, eventdata, handles)
-% hObject    handle to SavePoint (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-global PointLabel nframes VENC timeres branchList timeMIPcrossection area_vol
-global flowPerHeartCycle_vol PI_vol diam_vol maxVel_vol RI_vol flowPulsatile_vol
-global vTimeFrameave velMean_val dcm_obj fig segment1 SavePath MAGcrossection
+global PointLabel nframes VENC timeres branchList timeMIPcrossection area_val
+global flowPerHeartCycle_val PI_val diam_val maxVel_val RI_val flowPulsatile_val
+global vTimeFrameave velMean_val dcm_obj fig segmentFull SavePath MAGcrossection
 
-% Match excel row to current branch (vessel) name
-SaveRow =  sprintf('B%i',get(handles.NamePoint,'Value')+1);
+global vesselsAnalyzed allNotes
+
+vesselsAnalyzed{end+1} = PointLabel;
+
+set(handles.TextUpdate,'String','Saving Data.');drawnow;
+SaveRow =  sprintf('B%i',get(handles.NamePoint,'Value')+1); %match excel row to vessel name
 
 info_struct = getCursorInfo(dcm_obj);
 ptList = [info_struct.Position];
@@ -601,8 +533,8 @@ ptList = reshape(ptList,[3,numel(ptList)/3])';
 pindex = zeros(size(ptList,1),1);
 
 for n = 1:size(ptList,1)
-    xIdx = find(branchList(:,1) == ptList(n,2));
-    yIdx = find(branchList(xIdx,2) == ptList(n,1));
+    xIdx = find(branchList(:,1) == ptList(n,1));
+    yIdx = find(branchList(xIdx,2) == ptList(n,2));
     zIdx = find(branchList(xIdx(yIdx),3) == ptList(n,3));
     pindex(n) = xIdx(yIdx(zIdx));
 end
@@ -619,24 +551,25 @@ index_range(index_range<1) = [];
 index_range(index_range>size(branchList,1)) = [];
 index_range(Logical_branch(index_range)) = [];
 
+%%%%%%% SLIDING THRESHOLD %%%%%%%
 % Time-averaged data
-area = area_vol(index_range);
+area = area_val(index_range);
 area = [area;mean(area);std(area)];
-diam = diam_vol(index_range);
+diam = diam_val(index_range);
 diam = [diam;mean(diam);std(diam)];
-flowPerHeartCycle = flowPerHeartCycle_vol(index_range);
+flowPerHeartCycle = flowPerHeartCycle_val(index_range);
 flowPerHeartCycle = [flowPerHeartCycle;mean(flowPerHeartCycle);std(flowPerHeartCycle)];
-PI = PI_vol(index_range) ;
+PI = PI_val(index_range) ;
 PI = [PI;mean(PI);std(PI)];
-maxVel = maxVel_vol(index_range);
+maxVel = maxVel_val(index_range);
 maxVel = [maxVel;mean(maxVel);std(maxVel)];
 meanVel = velMean_val(index_range);
 meanVel = [meanVel;mean(meanVel);std(meanVel)];
-RI = RI_vol(index_range);
+RI = RI_val(index_range);
 RI = [RI;mean(RI);std(RI)];
 
 % Time-resolved flow
-flowPulsatile = flowPulsatile_vol(index_range,:);
+flowPulsatile = flowPulsatile_val(index_range,:);
 flowPulsatile = [flowPulsatile;mean(flowPulsatile,1);std(flowPulsatile,1)];
 
 % Collect branch name and Labels
@@ -652,16 +585,19 @@ end
 Labels = [Labels,0,0]; %neighboring CL points (including current)
 CLpoint = find(branchList(pindex,5)==branchActual)-1; %current CL point
 
-% Check if Max Velocity of current 5 planes is less than Venc
+% Check if Max Velocity of current 5 planes is less than VENC
 if sum(maxVel>VENC*0.1)==0
     MaxVel = 'YES';
 else
     MaxVel = 'NO';
 end
 
-Notes = get(handles.NoteBox,'String'); %get any notes from notebox
-SummaryInfo = {CLpoint,Notes,MaxVel,flowPerHeartCycle(end-1),PI(end-1),bnum};
-xlwrite([SavePath filesep 'SummaryParamTool.xls'],SummaryInfo,'Summary_Centerline',SaveRow);
+if isempty(allNotes{get(handles.NamePoint,'Value')+1})
+    Notes = get(handles.NoteBox,'String'); %get any notes from notebox
+    SummaryInfo = {CLpoint,Notes,MaxVel,flowPerHeartCycle(end-1),PI(end-1),bnum};
+    xlwrite([SavePath filesep 'SummaryParamTool.xls'],SummaryInfo,'Summary_Centerline',SaveRow);
+    set(handles.TextUpdate,'String','Saving Data..');drawnow;
+end 
 
 % save time-averaged
 col_header = ({'Point along Vessel', 'Area (cm^2)', 'Area Ratio', 'Max Velocity (cm/s)',...
@@ -671,6 +607,7 @@ time_avg = vertcat(col_header,num2cell(real(horzcat(Labels',...
 time_avg{end-1,1} = 'Mean';
 time_avg{end,1} = 'Standard Deviation';
 xlwrite([SavePath filesep 'SummaryParamTool.xls'],time_avg,[savename '_T_averaged']);
+set(handles.TextUpdate,'String','Saving Data...');drawnow;
 
 % save time-resolved
 spaces = repmat({''},1,nframes-1);
@@ -681,6 +618,7 @@ time_resolve = vertcat(col_header2, col_header3, num2cell(real(horzcat(Labels',f
 time_resolve{end-1,1} = 'Mean';
 time_resolve{end,1} = 'Standard Deviation';
 xlwrite([SavePath filesep 'SummaryParamTool.xls'],time_resolve,[savename '_T_resolved']);
+set(handles.TextUpdate,'String','Saving Data....');drawnow;
 
 % Save: interactive window, main GUI , and cross-section images as montage
 fig.Color = 'black';
@@ -692,12 +630,13 @@ fig2 = handles.ParameterTool;
 fig2.Color = [0.94,0.94,0.94];
 fig2.InvertHardcopy = 'off';
 saveas(fig2,[ SavePath filesep savename '_GUIview.jpg'])
+set(handles.TextUpdate,'String','Saving Data.....');drawnow;
 
 % Get the dimensions of the sides of the slices created
-imdim = sqrt(size(segment1,2));
+imdim = sqrt(size(segmentFull,2));
 
 % Get the cross sections for all points for branch
-BranchSlice = segment1(index_range,:); %Restricts for branch edges
+BranchSlice = segmentFull(index_range,:); %Restricts for branch edges
 cdSlice = timeMIPcrossection(index_range,:);
 velSlice = vTimeFrameave(index_range,:);
 magSlice = MAGcrossection(index_range,:);
@@ -730,131 +669,224 @@ subplot('position', [0 0 1 1])
 montage(FinalImage, 'Size', [subL 4]);
 saveas(f1,[ SavePath filesep savename '_Slicesview.jpg'])
 close(f1)
+set(handles.TextUpdate,'String','Saving Data......');drawnow;
 
-set(handles.TextUpdate,'String',['Completed saving ' savename ' data to summary file.']);drawnow;
-pause(1.5)
-set(handles.TextUpdate,'String','Please select a new point for analysis');drawnow;
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%%%%%%%%%% KMEANS %%%%%%%%%%%%%%
+% Time-averaged data
+area = area_val(index_range);
+area = [area;mean(area);std(area)];
+diam = diam_val(index_range);
+diam = [diam;mean(diam);std(diam)];
+flowPerHeartCycle = flowPerHeartCycle_val(index_range);
+flowPerHeartCycle = [flowPerHeartCycle;mean(flowPerHeartCycle);std(flowPerHeartCycle)];
+PI = PI_val(index_range) ;
+PI = [PI;mean(PI);std(PI)];
+maxVel = maxVel_val(index_range);
+maxVel = [maxVel;mean(maxVel);std(maxVel)];
+meanVel = velMean_val(index_range);
+meanVel = [meanVel;mean(meanVel);std(meanVel)];
+RI = RI_val(index_range);
+RI = [RI;mean(RI);std(RI)];
+
+% Time-resolved flow
+flowPulsatile = flowPulsatile_val(index_range,:);
+flowPulsatile = [flowPulsatile;mean(flowPulsatile,1);std(flowPulsatile,1)];
+
+% Collect branch name and Labels
+savename = PointLabel; %name of current vessel
+warning('off','MATLAB:xlswrite:AddSheet') %shut off excel sheet warning
+Labels = zeros(1,length(index_range));
+
+% Current and neighboring centerline points along branch
+for n = 1:length(index_range)
+    branchActual = branchList(branchList(:,4) == bnum,5);
+    Labels(n) = find(branchList(index_range(n),5)==branchActual)-1;
+end
+Labels = [Labels,0,0]; %neighboring CL points (including current)
+CLpoint = find(branchList(pindex,5)==branchActual)-1; %current CL point
+
+% Check if Max Velocity of current 5 planes is less than VENC
+if sum(maxVel>VENC*0.1)==0
+    MaxVel = 'YES';
+else
+    MaxVel = 'NO';
+end
+
+if isempty(allNotes{get(handles.NamePoint,'Value')+1})
+    Notes = get(handles.NoteBox,'String'); %get any notes from notebox
+    SummaryInfo = {CLpoint,Notes,MaxVel,flowPerHeartCycle(end-1),PI(end-1),bnum};
+    xlwrite([SavePath filesep 'SummaryParamTool.xls'],SummaryInfo,'Summary_Centerline',SaveRow);
+end 
+
+% save time-averaged
+col_header = ({'Point along Vessel', 'Area (cm^2)', 'Area Ratio', 'Max Velocity (cm/s)',...
+    'Mean Velocity (cm/s)','Average Flow(mL/s)','Pulsatility Index','Resistivity Index'});
+time_avg = vertcat(col_header,num2cell(real(horzcat(Labels',...
+    area,diam,maxVel,meanVel,flowPerHeartCycle,PI,RI))));
+time_avg{end-1,1} = 'Mean';
+time_avg{end,1} = 'Standard Deviation';
+xlwrite([SavePath filesep 'SummaryParamTool.xls'],time_avg,[savename '_T_averaged']);
+
+% save time-resolved
+spaces = repmat({''},1,nframes-1);
+col_header2 = ({'Cardiac Time (ms)'});
+col_header3 = horzcat({'Point along Vessel','Flow (mL/s)'},spaces);
+col_header2 = horzcat(col_header2, num2cell(real(timeres/1000*linspace(1,nframes,nframes))));
+time_resolve = vertcat(col_header2, col_header3, num2cell(real(horzcat(Labels',flowPulsatile))));
+time_resolve{end-1,1} = 'Mean';
+time_resolve{end,1} = 'Standard Deviation';
+xlwrite([SavePath filesep 'SummaryParamTool.xls'],time_resolve,[savename '_T_resolved']);
+
+% Get the dimensions of the sides of the slices created
+imdim = sqrt(size(segmentFull,2));
+
+% Get the cross sections for all points for branch
+BranchSlice = segmentFull(index_range,:); %Restricts for branch edges
+cdSlice = timeMIPcrossection(index_range,:);
+velSlice = vTimeFrameave(index_range,:);
+magSlice = MAGcrossection(index_range,:);
+
+subL = size(BranchSlice,1);
+f1 = figure('Position',[100,100,700,700],'Visible','off');
+FinalImage = zeros(imdim,imdim,1,4*subL);
+temp = 1;
+
+%Put all images into a single image for saving cross sectional data
+for q = 1:subL
+    % Create some images of the cross section that is used
+    CDcross = cdSlice(q,:);
+    CDcross = reshape(CDcross,imdim,imdim)./max(CDcross);
+    Vcross = velSlice(q,:);
+    Vcross = reshape(Vcross,imdim,imdim)./max(Vcross);
+    Magcross = magSlice(q,:);
+    Magcross = reshape(Magcross,imdim,imdim)./max(Magcross);
+    Maskcross = BranchSlice(q,:);
+    Maskcross = reshape(Maskcross,imdim,imdim);
+    
+    % Put all images into slices
+    FinalImage(:,:,1,temp) = Magcross;
+    FinalImage(:,:,1,temp+1) = CDcross;
+    FinalImage(:,:,1,temp+2) = Vcross;
+    FinalImage(:,:,1,temp+3) = Maskcross;
+    temp = temp+4;
+end
+subplot('position', [0 0 1 1])
+montage(FinalImage, 'Size', [subL 4]);
+saveas(f1,[ SavePath filesep savename '_Slicesview.jpg'])
+close(f1)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 set(handles.NoteBox,'String',' ');
+set(handles.TextUpdate,'String','Please select a new point for analysis');drawnow;
+NamePoint_Callback(hObject, eventdata, handles)
 
 
+% --- NoteBox_Callback
 function NoteBox_Callback(hObject, eventdata, handles)
-% hObject    handle to NoteBox (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-% Hints: get(hObject,'String') returns contents of NoteBox as text
-%        str2double(get(hObject,'String')) returns contents of NoteBox as a double
+
 
 % --- Executes during object creation, after setting all properties.
 function NoteBox_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to NoteBox (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-% Hint: edit controls usually have a white background on Windows.
-%       See ISPC and COMPUTER.
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
 
 
+% --- Executes on button press in SubmitNote.
+function SubmitNote_Callback(hObject, eventdata, handles)
+global SavePath allNotes
+
+set(handles.TextUpdate,'String','Saving Note for Current Vessel');drawnow;
+SaveLoc =  sprintf('C%i',get(handles.NamePoint,'Value')+1);
+Notes = {get(handles.NoteBox,'String')}; %get any notes from notebox
+allNotes(get(handles.NamePoint,'Value')+1) = Notes;
+xlwrite([SavePath filesep 'SummaryParamTool.xls'],Notes,'Summary_Centerline',SaveLoc);
+set(handles.NoteBox,'String',' ');
+set(handles.TextUpdate,'String','Done Saving Note');drawnow;
+
 % --- Executes on button press in AxialView.
 function AxialView_Callback(hObject, eventdata, handles)
-% hObject    handle to AxialView (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
 global fig
 view(fig.CurrentAxes,[180,90])
 
 
 % --- Executes on button press in SagittalView.
 function SagittalView_Callback(hObject, eventdata, handles)
-% hObject    handle to SagittalView (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
 global fig
 view(fig.CurrentAxes,[180,0])
 
 
 % --- Executes on button press in CoronalView.
 function CoronalView_Callback(hObject, eventdata, handles)
-% hObject    handle to CoronalView (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
 global fig
 view(fig.CurrentAxes,[90,0])
 
 
 % --- Executes on slider movement.
 function AreaThreshSlide_Callback(hObject, eventdata, handles)
-% hObject    handle to AreaThreshSlide (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-% Hints: get(hObject,'Value') returns position of slider
-%        get(hObject,'Min') and get(hObject,'Max') to determine range of slider
-global LogPoints area_vol branchList hscatter AveAreaBranch PI_vol RI_vol
-global velMean_val diam_vol maxVel_vol flowPerHeartCycle_vol StdvFromMean
+global LogPoints area_val branchList hscatter AveAreaBranch PI_val RI_val
+global velMean_val diam_val maxVel_val flowPerHeartCycle_val StdvFromMean
 
 LogPoints = find(AveAreaBranch>max(AveAreaBranch)*get(hObject,'Value')*.15);
 LogPoints = ismember(branchList(:,4),LogPoints);
 
 if get(handles.InvertArea,'Value') == 0
-    hscatter.XData = branchList(LogPoints,2);
-    hscatter.YData = branchList(LogPoints,1);
+    hscatter.XData = branchList(LogPoints,1);
+    hscatter.YData = branchList(LogPoints,2);
     hscatter.ZData = branchList(LogPoints,3);
     
     val = get(handles.parameter_choice, 'Value');
     str = get(handles.parameter_choice, 'String');
     switch str{val}
         case 'Area'
-            hscatter.CData = area_vol(LogPoints);
+            hscatter.CData = area_val(LogPoints);
         case 'Ratio of Areas'
-            hscatter.CData = diam_vol(LogPoints);
+            hscatter.CData = diam_val(LogPoints);
         case 'Total Flow'
-            hscatter.CData = flowPerHeartCycle_vol(LogPoints);
+            hscatter.CData = flowPerHeartCycle_val(LogPoints);
         case 'Maximum Velocity '
-            hscatter.CData = maxVel_vol(LogPoints);
+            hscatter.CData = maxVel_val(LogPoints);
         case 'Mean Velocity'
             hscatter.CData = velMean_val(LogPoints);
         case 'Flow Consistency'
             hscatter.CData = StdvFromMean(LogPoints);
         case 'Resistance Index'
-            hscatter.CData = RI_vol(LogPoints);
+            hscatter.CData = RI_val(LogPoints);
         case str{val}
-            hscatter.CData = PI_vol(LogPoints);
+            hscatter.CData = PI_val(LogPoints);
     end
 else
-    hscatter.XData = branchList(~LogPoints,2);
-    hscatter.YData = branchList(~LogPoints,1);
+    hscatter.XData = branchList(~LogPoints,1);
+    hscatter.YData = branchList(~LogPoints,2);
     hscatter.ZData = branchList(~LogPoints,3);
     
     val = get(handles.parameter_choice, 'Value');
     str = get(handles.parameter_choice, 'String');
     switch str{val}
         case 'Area'
-            hscatter.CData = area_vol(~LogPoints);
+            hscatter.CData = area_val(~LogPoints);
         case 'Ratio of Areas'
-            hscatter.CData = diam_vol(~LogPoints);
+            hscatter.CData = diam_val(~LogPoints);
         case 'Total Flow'
-            hscatter.CData = flowPerHeartCycle_vol(~LogPoints);
+            hscatter.CData = flowPerHeartCycle_val(~LogPoints);
         case 'Maximum Velocity '
-            hscatter.CData = maxVel_vol(~LogPoints);
+            hscatter.CData = maxVel_val(~LogPoints);
         case 'Mean Velocity'
             hscatter.CData = velMean_val(~LogPoints);
         case 'Flow Consistency'
             hscatter.CData = StdvFromMean(LogPoints);
         case 'Resistance Index'
-            hscatter.CData = RI_vol(~LogPoints);
+            hscatter.CData = RI_val(~LogPoints);
         case str{val}
-            hscatter.CData = PI_vol(~LogPoints);
+            hscatter.CData = PI_val(~LogPoints);
     end
 end
 
 
 % --- Executes during object creation, after setting all properties.
 function AreaThreshSlide_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to AreaThreshSlide (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-% Hint: slider controls usually have a light gray background.
 if isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor',[.9 .9 .9]);
 end
@@ -862,21 +894,12 @@ end
 
 % --- Executes on slider movement.
 function clWidthSlider_Callback(hObject, eventdata, handles)
-% hObject    handle to clWidthSlider (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-% Hints: get(hObject,'Value') returns position of slider
-%        get(hObject,'Min') and get(hObject,'Max') to determine range of slider
 global hscatter 
-
 set(hscatter,'SizeData',get(hObject,'Value'));
+
 
 % --- Executes during object creation, after setting all properties.
 function clWidthSlider_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to clWidthSlider (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-% Hint: slider controls usually have a light gray background.
 if isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor',[.9 .9 .9]);
 end
@@ -884,9 +907,6 @@ end
 
 % --- Executes on button press in VisualTool.
 function VisualTool_Callback(hObject, eventdata, handles)
-% hObject    handle to VisualTool (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
 global Planes branchList segment caseFilePath res 
 set(handles.TextUpdate,'String','Opening Visual Tool'); drawnow;
 fourDvis(Planes,branchList,segment,caseFilePath,res);
@@ -900,80 +920,71 @@ function InvertArea_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 % Hint: get(hObject,'Value') returns toggle state of InvertArea
-global LogPoints area_vol branchList hscatter PI_vol RI_vol velMean_val
-global diam_vol maxVel_vol flowPerHeartCycle_vol StdvFromMean
+global LogPoints area_val branchList hscatter PI_val RI_val velMean_val
+global diam_val maxVel_val flowPerHeartCycle_val StdvFromMean
 
 % Capable of inverting areaThresh (keep vessels OUTSIDE/INSIDE areaThresh)
 OnOff = get(hObject,'Value'); %on off switch
 if OnOff == 0 %if turned off (default),
-    hscatter.XData = branchList(LogPoints,2); %plot angio w/in areaThresh
-    hscatter.YData = branchList(LogPoints,1);
+    hscatter.XData = branchList(LogPoints,1); %plot angio w/in areaThresh
+    hscatter.YData = branchList(LogPoints,2);
     hscatter.ZData = branchList(LogPoints,3);
     
     val = get(handles.parameter_choice, 'Value');
     str = get(handles.parameter_choice, 'String');
     switch str{val} %plot centerlines w/in areaThresh
         case 'Area'
-            hscatter.CData = area_vol(LogPoints);
+            hscatter.CData = area_val(LogPoints);
         case 'Ratio of Areas'
-            hscatter.CData = diam_vol(LogPoints);
+            hscatter.CData = diam_val(LogPoints);
         case 'Total Flow'
-            hscatter.CData = flowPerHeartCycle_vol(LogPoints);
+            hscatter.CData = flowPerHeartCycle_val(LogPoints);
         case 'Maximum Velocity '
-            hscatter.CData = maxVel_vol(LogPoints);
+            hscatter.CData = maxVel_val(LogPoints);
         case 'Mean Velocity'
             hscatter.CData = velMean_val(LogPoints);
         case 'Flow Consistency'
             hscatter.CData = StdvFromMean(LogPoints);
         case 'Resistance Index'
-            hscatter.CData = RI_vol(LogPoints);
+            hscatter.CData = RI_val(LogPoints);
         case str{val}
-            hscatter.CData = PI_vol(LogPoints);
+            hscatter.CData = PI_val(LogPoints);
     end
 else %if invert is turned on, PLOT DATA POINTS OUTSIDE AREA THRESHOLD
-    hscatter.XData = branchList(~LogPoints,2);
-    hscatter.YData = branchList(~LogPoints,1);
+    hscatter.XData = branchList(~LogPoints,1);
+    hscatter.YData = branchList(~LogPoints,2);
     hscatter.ZData = branchList(~LogPoints,3);
     
     val = get(handles.parameter_choice, 'Value');
     str = get(handles.parameter_choice, 'String');
     switch str{val}
         case 'Area'
-            hscatter.CData = area_vol(~LogPoints);
+            hscatter.CData = area_val(~LogPoints);
         case 'Ratio of Areas'
-            hscatter.CData = diam_vol(~LogPoints);
+            hscatter.CData = diam_val(~LogPoints);
         case 'Total Flow'
-            hscatter.CData = flowPerHeartCycle_vol(~LogPoints);
+            hscatter.CData = flowPerHeartCycle_val(~LogPoints);
         case 'Maximum Velocity '
-            hscatter.CData = maxVel_vol(~LogPoints);
+            hscatter.CData = maxVel_val(~LogPoints);
         case 'Mean Velocity'
             hscatter.CData = velMean_val(~LogPoints);
         case 'Flow Consistency'
             hscatter.CData = StdvFromMean(LogPoints);
         case 'Resistance Index'
-            hscatter.CData = RI_vol(~LogPoints);
+            hscatter.CData = RI_val(~LogPoints);
         case str{val}
-            hscatter.CData = PI_vol(~LogPoints);
+            hscatter.CData = PI_val(~LogPoints);
     end
 end
 
+
 % --- Executes on slider movement.
 function VcrossTRslider_Callback(hObject, eventdata, handles)
-% hObject    handle to VcrossTRslider (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hints: get(hObject,'Value') returns position of slider
-%        get(hObject,'Min') and get(hObject,'Max') to determine range of slider
 updateVcrossTR(handles)
+
 
 % --- Executes during object creation, after setting all properties.
 function VcrossTRslider_CreateFcn(hObject, eventdata, handles)
-% hObject    handle to VcrossTRslider (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    empty - handles not created until after all CreateFcns called
-
-% Hint: slider controls usually have a light gray background.
 if isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor',[.9 .9 .9]);
 end
@@ -981,8 +992,8 @@ end
 
 
 function updateVcrossTR(handles)
-global dcm_obj hfull segment1 VplanesAllx VplanesAlly VplanesAllz nframes
-global branchList
+global dcm_obj hfull segmentFull VplanesAllx VplanesAlly VplanesAllz 
+global nframes branchList
 
 info_struct = getCursorInfo(dcm_obj);
 if ~isempty(info_struct)
@@ -991,14 +1002,14 @@ if ~isempty(info_struct)
     pindex = zeros(size(ptList,1),1);
     % Find cursor point in branchList
     for n = 1:size(ptList,1)
-        xIdx = find(branchList(:,1) == ptList(n,2));
-        yIdx = find(branchList(xIdx,2) == ptList(n,1));
+        xIdx = find(branchList(:,1) == ptList(n,1));
+        yIdx = find(branchList(xIdx,2) == ptList(n,2));
         zIdx = find(branchList(xIdx(yIdx),3) == ptList(n,3));
         pindex(n) = xIdx(yIdx(zIdx));
     end
-    imdim = sqrt(size(segment1,2)); %side length of cross-section
+    imdim = sqrt(size(segmentFull,2)); %side length of cross-section
 
-    Maskcross = segment1(pindex,:);
+    Maskcross = segmentFull(pindex,:);
     Maskcross = reshape(Maskcross,imdim,imdim);
 
     %get slice number from slider
@@ -1022,8 +1033,8 @@ end
 function txt = myupdatefcn_all(empt,event_obj)
 % Customizes text of data tips
 global Labeltxt branchLabeled PointLabel branchList fullCData
-global flowPulsatile_vol Planes p dcm_obj Ntxt hfull timeMIPcrossection
-global segment1 MAGcrossection vTimeFrameave fig timeres nframes
+global flowPulsatile_val Planes p dcm_obj Ntxt hfull timeMIPcrossection
+global segmentFull MAGcrossection vTimeFrameave fig timeres nframes
 global VplanesAllx VplanesAlly VplanesAllz
 
 info_struct = getCursorInfo(dcm_obj);
@@ -1033,8 +1044,8 @@ pindex = zeros(size(ptList,1),1);
 
 % Find cursor point in branchList
 for n = 1:size(ptList,1)
-    xIdx = find(branchList(:,1) == ptList(n,2));
-    yIdx = find(branchList(xIdx,2) == ptList(n,1));
+    xIdx = find(branchList(:,1) == ptList(n,1));
+    yIdx = find(branchList(xIdx,2) == ptList(n,2));
     zIdx = find(branchList(xIdx(yIdx),3) == ptList(n,3));
     pindex(n) = xIdx(yIdx(zIdx));
 end
@@ -1048,10 +1059,10 @@ index_range(index_range>size(branchList,1)) = [];
 index_range(Logical_branch(index_range)) = [];
 
 % Update Cross-sectional planes for points
-set(p,'XData',Planes(pindex,:,2)','YData',Planes(pindex,:,1)','ZData',Planes(pindex,:,3)')
-imdim = sqrt(size(segment1,2)); %side length of cross-section
+set(p,'XData',Planes(pindex,:,1)','YData',Planes(pindex,:,2)','ZData',Planes(pindex,:,3)')
+imdim = sqrt(size(segmentFull,2)); %side length of cross-section
 
-Maskcross = segment1(pindex,:);
+Maskcross = segmentFull(pindex,:);
 Maskcross = reshape(Maskcross,imdim,imdim);
 
 %Magnitude TA
@@ -1089,7 +1100,6 @@ visboundaries(hfull.TRcross,Maskcross,'LineWidth',1)
 % Segmentation mask
 %imshow(Maskcross,[],'InitialMagnification','fit','Parent',hfull.TRcross)
 
-
 % Get value of parameter at point and mean within 5pt window
 value = fullCData(pindex);
 average = fullCData(index_range);
@@ -1099,22 +1109,22 @@ pside(pside==pindex) = [];
 cardiacCycle = (1:nframes).*timeres; %vector of cardiac cycle (ms)
 % Plot flow waveform
 if length(pside)==2
-    plot(cardiacCycle,smooth(flowPulsatile_vol(pindex,:)),...
-        'k',cardiacCycle,smooth(flowPulsatile_vol(pside(1),:)),...
-        'r',cardiacCycle,smooth(flowPulsatile_vol(pside(2),:)),...
+    plot(cardiacCycle,smooth(flowPulsatile_val(pindex,:)),...
+        'k',cardiacCycle,smooth(flowPulsatile_val(pside(1),:)),...
+        'r',cardiacCycle,smooth(flowPulsatile_val(pside(2),:)),...
         'r','LineWidth',2,'Parent',hfull.pfwaveform)
 elseif length(pside)==3
-    plot(cardiacCycle,smooth(flowPulsatile_vol(pindex,:)),...
-        'k',cardiacCycle,smooth(flowPulsatile_vol(pside(1),:)),...
-        'r',cardiacCycle,smooth(flowPulsatile_vol(pside(2),:)),...
-        'r',cardiacCycle,smooth(flowPulsatile_vol(pside(3),:)),...
+    plot(cardiacCycle,smooth(flowPulsatile_val(pindex,:)),...
+        'k',cardiacCycle,smooth(flowPulsatile_val(pside(1),:)),...
+        'r',cardiacCycle,smooth(flowPulsatile_val(pside(2),:)),...
+        'r',cardiacCycle,smooth(flowPulsatile_val(pside(3),:)),...
         'b','LineWidth',2,'Parent',hfull.pfwaveform)
 else
-    plot(cardiacCycle,smooth(flowPulsatile_vol(pindex,:)),...
-        'k',cardiacCycle,smooth(flowPulsatile_vol(pside(1),:)),...
-        'r',cardiacCycle,smooth(flowPulsatile_vol(pside(2),:)),...
-        'r',cardiacCycle,smooth(flowPulsatile_vol(pside(3),:)),...
-        'b',cardiacCycle,smooth(flowPulsatile_vol(pside(4),:)),...
+    plot(cardiacCycle,smooth(flowPulsatile_val(pindex,:)),...
+        'k',cardiacCycle,smooth(flowPulsatile_val(pside(1),:)),...
+        'r',cardiacCycle,smooth(flowPulsatile_val(pside(2),:)),...
+        'r',cardiacCycle,smooth(flowPulsatile_val(pside(3),:)),...
+        'b',cardiacCycle,smooth(flowPulsatile_val(pside(4),:)),...
         'b','LineWidth',2,'Parent',hfull.pfwaveform)
 end
 set(get(hfull.pfwaveform,'XLabel'),'String','Cardiac Time Frame (ms)','FontSize',12)
@@ -1129,7 +1139,7 @@ if branchLabeled ~= bnum
     textint = 0:5:length(branchActual)-1;
     numString_val = num2str(textint);
     numString_val = strsplit(numString_val);
-    Ntxt = text(branchActual(textint+1,2),branchActual(textint+1,1), ...
+    Ntxt = text(branchActual(textint+1,1),branchActual(textint+1,2), ...
         branchActual(textint+1,3),numString_val,'Color','w','FontSize',10,...
         'HitTest','off','PickableParts','none','Parent',fig.Children(2));
 end
@@ -1139,9 +1149,8 @@ branchActual = branchList(branchList(:,4) == branchLabeled,5);
 CurrentNum = find(branchList(pindex,5)==branchActual)-1;
 
 % Update cursor text
-txt = {['Point Label:' , PointLabel , sprintf('\n'), ...
+txt = {['Point Label: ' , PointLabel , sprintf('\n'), ...
     Labeltxt{1,1}, sprintf('%0.3f',value),Labeltxt{1,2}, sprintf('\n'), ...
     Labeltxt{2,1},sprintf('%0.3f',mean(average)),Labeltxt{2,2},sprintf('\n'), ...
     'Current Branch #: ',sprintf('%i',CurrentNum),sprintf('\n') ...
     'Label Number: ', sprintf('%i',bnum)]};
-

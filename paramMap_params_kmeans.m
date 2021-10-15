@@ -160,9 +160,11 @@ set(handles.TextUpdate,'String','Performing In-Plane Segmentation');drawnow;
 area_val = zeros(size(Tangent_V,1),1);
 diam_val = zeros(size(Tangent_V,1),1);
 segmentFull = zeros([length(branchList),(width).^2]);
-SE = strel('square', 4);
+SE = strel('square',4);
+%viscosity = .0045;      % in kg/(m s^)
 
 for n = 1:size(Tangent_V,1)
+    %%%%%%%%%%% KMEANS %%%%%%%%%%%%%%
     % Get Planes and normalize
     clust = horzcat(timeMIPcrossection(n,:)',vTimeFrameave(n,:)');
     [idx,~] = kmeans(clust,2);
@@ -182,6 +184,7 @@ for n = 1:size(Tangent_V,1)
     end
         
     % Remove all segments not closest to the center
+    SE = strel('square',3);
     segment = imerode(segment,SE);     
     s = regionprops(logical(segment),'centroid');    
     CenterIm = [size(segment,1)/2,size(segment,2)/2];
@@ -214,9 +217,10 @@ for n = 1:size(Tangent_V,1)
     
     % Vessel area measurements
     dArea = (res/10)^2; %pixel size (cm^2)
-    area_val(n) = sum(segment(:))*dArea*((2*r+1)/(2*r*InterpVals+1))^2;
+    area_valK(n,1) = sum(segment(:))*dArea*((2*r+1)/(2*r*InterpVals+1))^2;
+    %area_valK = area_valK';
     
-    segmentFull(n,:) = segment(:);
+    segmentFullK(n,:) = segment(:);
     
     % New with ratios of areas. Ratio of smallest inner circle over
     % largest encompassing outer circle (assume circular area). Measure of
@@ -226,10 +230,11 @@ for n = 1:size(Tangent_V,1)
     [xLoc,yLoc] = find(bwperim(segment)); %get perimeter
     D = pdist2([xLoc,yLoc],[xLoc,yLoc]); %distance b/w perimeter points
     Rout = max(D(:))/2; %radius of largest outer circle
-    diam_val(n) = Rin^2/Rout^2; %ratio of areas
-    diam_val(diam_val==inf) = 0;
+    diam_valK(n,1) = Rin^2/Rout^2; %ratio of areas
+    diam_valK(diam_valK==inf) = 0;
+    %diam_valK = diam_valK';
     %diam_val(n) = 2*sqrt(area_val(n)/pi); %equivalent diameter
-    
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%
 end
 clear cdSLICE magSLICE temp segment weightIMAGE dArea L LabUse CenIdx Num
 
@@ -317,6 +322,9 @@ for j = 1:nframes
     flowPulsatile_val(:,j) = vTimeFramerowMean.*area_val; %TR flow (ml/s)
     maxVelFrame(:,j) = max(vTimeFrame,[],2); %max vel. each frame (cm/s)
     velPulsatile_val(:,j) = vTimeFramerowMean;%mean vel. each frame (cm/s)  
+    % Simple WSS calculation based on the max velocity here and the diam.
+    % Assumes parabolic flow profile (parabolic assumption, in Pa)
+    %wss_simple (:,j) = viscosity*maxVelFrame(:,j) * 0.01 * sqrt(2*pi*maxVelFrame(:,j)*0.01/(flowPulsatile(:,j)*1e-6));          
 end 
 clear COL ROW idCOL Tangent_V v1 v2 v3 vx vy vz x_full y_full z_full x y z
 
