@@ -1,11 +1,11 @@
 function [area_val,diam_val,flowPerHeartCycle_val,maxVel_val,PI_val,RI_val,flowPulsatile_val,...
     velMean_val,VplanesAllx,VplanesAlly,VplanesAllz,r,timeMIPcrossection,segmentFull,...
     vTimeFrameave,MAGcrossection,bnumMeanFlow,bnumStdvFlow,StdvFromMean,Planes] ...
-    = paramMap_params_kmeans(filetype,branchList,matrix,timeMIP,vMean, ...
+    = paramMap_params_kmeans(filetype,branchList,matrix,timeMIP,vMean,back,...
     BGPCdone,directory,nframes,res,MAG,IDXstart,IDXend,handles)
 %PARAMMAP_PARAMS_NEW: Create tangent planes and calculate hemodynamics
+%   Based on a k-means segmentation algorithm implemented by Eric Schrauben
 %   Used by: loadpcvipr.m
-%   Dependencies: slidingThreshold.m
 
 %% Tangent Plane Creation
 set(handles.TextUpdate,'String','Creating Tangent Planes');drawnow;
@@ -160,9 +160,11 @@ set(handles.TextUpdate,'String','Performing In-Plane Segmentation');drawnow;
 area_val = zeros(size(Tangent_V,1),1);
 diam_val = zeros(size(Tangent_V,1),1);
 segmentFull = zeros([length(branchList),(width).^2]);
-SE = strel('square', 4);
+SE = strel('square',3);
+%viscosity = .0045;      % in kg/(m s^)
 
 for n = 1:size(Tangent_V,1)
+    %%%%%%%%%%% KMEANS %%%%%%%%%%%%%%
     % Get Planes and normalize
     clust = horzcat(timeMIPcrossection(n,:)',vTimeFrameave(n,:)');
     [idx,~] = kmeans(clust,2);
@@ -214,7 +216,8 @@ for n = 1:size(Tangent_V,1)
     
     % Vessel area measurements
     dArea = (res/10)^2; %pixel size (cm^2)
-    area_val(n) = sum(segment(:))*dArea*((2*r+1)/(2*r*InterpVals+1))^2;
+    area_val(n,1) = sum(segment(:))*dArea*((2*r+1)/(2*r*InterpVals+1))^2;
+    %area_valK = area_valK';
     
     segmentFull(n,:) = segment(:);
     
@@ -226,10 +229,11 @@ for n = 1:size(Tangent_V,1)
     [xLoc,yLoc] = find(bwperim(segment)); %get perimeter
     D = pdist2([xLoc,yLoc],[xLoc,yLoc]); %distance b/w perimeter points
     Rout = max(D(:))/2; %radius of largest outer circle
-    diam_val(n) = Rin^2/Rout^2; %ratio of areas
+    diam_val(n,1) = Rin^2/Rout^2; %ratio of areas
     diam_val(diam_val==inf) = 0;
+    %diam_valK = diam_valK';
     %diam_val(n) = 2*sqrt(area_val(n)/pi); %equivalent diameter
-    
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%
 end
 clear cdSLICE magSLICE temp segment weightIMAGE dArea L LabUse CenIdx Num
 
@@ -253,7 +257,7 @@ idCOL = reshape(ROW+COL,[1 numel(ROW)]); %interp query points
 
 for j = 1:nframes
     if strcmp(filetype,'dat')
-        set(handles.TextUpdate,'String',['Calculating Quantitative Parameters Time Frame: ' num2str(j) '/' num2str(nframes)]);drawnow;
+        set(handles.TextUpdate,'String',['Calculating Quantitative Params Frame: ' num2str(j) '/' num2str(nframes)]);drawnow;
 
         % Load x,y,z components of velocity - single frame
         vx = load_dat(fullfile(directory, ['ph_' num2str(j-1,'%03i') '_vd_1.dat']),[matrix(1) matrix(2) matrix(3)]);
@@ -264,6 +268,13 @@ for j = 1:nframes
         vz = vz(IDXstart(1):IDXend(1),IDXstart(2):IDXend(2),IDXstart(3):IDXend(3)); 
         vx = vx(IDXstart(1):IDXend(1),IDXstart(2):IDXend(2),IDXstart(3):IDXend(3));
         vy = vy(IDXstart(1):IDXend(1),IDXstart(2):IDXend(2),IDXstart(3):IDXend(3));
+        
+        % Correct background phase (if autoBGPC_flag is off)
+        if ~BGPCdone
+            vx = vx - back(:,:,:,1); %subtract off background phase in x-dir
+            vy = vy - back(:,:,:,2);
+            vz = vz - back(:,:,:,3);
+        end 
         
     else
         set(handles.TextUpdate,'String',['Calculating Quantitative - Parameters Time Frame: ' num2str(j) '/' num2str(nframes)]);drawnow;
@@ -282,19 +293,24 @@ for j = 1:nframes
             [IDXstart(1),IDXstart(2),IDXstart(3)], ...
             [IDXend(1)-IDXstart(1)+1,IDXend(2)-IDXstart(2)+1,IDXend(3)-IDXstart(3)+1]));
         
-        %{ 
+        % Correct background phase (if autoBGPC_flag is off)
+        if ~BGPCdone
+            vx = vx - back(:,:,:,1); %subtract off background phase in x-dir
+            vy = vy - back(:,:,:,2);
+            vz = vz - back(:,:,:,3);
+        end 
+        
         %use for flow python
         % Load x,y,z components of velocity (cropped) - single frame
-        vx = h5read(fullfile(directory,'Flow.h5'),'/VX', ... 
-            [IDXstart(1),IDXstart(2),IDXstart(3),j], ...
-            [IDXend(1)-IDXstart(1)+1,IDXend(2)-IDXstart(2)+1,IDXend(3)-IDXstart(3)+1,1]);
-        vy = h5read(fullfile(directory,'Flow.h5'),'/VY', ... 
-            [IDXstart(1),IDXstart(2),IDXstart(3),j], ...
-            [IDXend(1)-IDXstart(1)+1,IDXend(2)-IDXstart(2)+1,IDXend(3)-IDXstart(3)+1,1]);
-        vz = h5read(fullfile(directory,'Flow.h5'),'/VZ', ... 
-            [IDXstart(1),IDXstart(2),IDXstart(3),j], ...
-            [IDXend(1)-IDXstart(1)+1,IDXend(2)-IDXstart(2)+1,IDXend(3)-IDXstart(3)+1,1]);
-        %}
+%         vx = h5read(fullfile(directory,'Flow.h5'),'/VX', ... 
+%             [IDXstart(1),IDXstart(2),IDXstart(3),j], ...
+%             [IDXend(1)-IDXstart(1)+1,IDXend(2)-IDXstart(2)+1,IDXend(3)-IDXstart(3)+1,1]);
+%         vy = h5read(fullfile(directory,'Flow.h5'),'/VY', ... 
+%             [IDXstart(1),IDXstart(2),IDXstart(3),j], ...
+%             [IDXend(1)-IDXstart(1)+1,IDXend(2)-IDXstart(2)+1,IDXend(3)-IDXstart(3)+1,1]);
+%         vz = h5read(fullfile(directory,'Flow.h5'),'/VZ', ... 
+%             [IDXstart(1),IDXstart(2),IDXstart(3),j], ...
+%             [IDXend(1)-IDXstart(1)+1,IDXend(2)-IDXstart(2)+1,IDXend(3)-IDXstart(3)+1,1]);
     end 
     
     % Interpolation of time-resolved velocities
@@ -317,6 +333,9 @@ for j = 1:nframes
     flowPulsatile_val(:,j) = vTimeFramerowMean.*area_val; %TR flow (ml/s)
     maxVelFrame(:,j) = max(vTimeFrame,[],2); %max vel. each frame (cm/s)
     velPulsatile_val(:,j) = vTimeFramerowMean;%mean vel. each frame (cm/s)  
+    % Simple WSS calculation based on the max velocity here and the diam.
+    % Assumes parabolic flow profile (parabolic assumption, in Pa)
+    %wss_simple (:,j) = viscosity*maxVelFrame(:,j) * 0.01 * sqrt(2*pi*maxVelFrame(:,j)*0.01/(flowPulsatile(:,j)*1e-6));          
 end 
 clear COL ROW idCOL Tangent_V v1 v2 v3 vx vy vz x_full y_full z_full x y z
 

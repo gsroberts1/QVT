@@ -96,15 +96,15 @@ clear imageData
 %%% Create magnitude image planes for slice visualizations
 figVis = figure('CloseRequestFcn',@my_closereq); %open second figure
 
-[X,Y,Z] = meshgrid(1:size(handles.MAG,2),1:size(handles.MAG,1),1:size(handles.MAG,3)); 
+[X,Y,Z] = meshgrid(1:size(handles.MAG,1),1:size(handles.MAG,2),1:size(handles.MAG,3)); 
 hold on     
-hsurfacesy = slice(X,Y,Z,handles.MAG,[],1,[]); %add planes to images
-hsurfacesx = slice(X,Y,Z,handles.MAG,1,[],[]);
-hsurfacesz = slice(X,Y,Z,handles.MAG,[],[],1);
+hsurfacesx = slice(X,Y,Z,permute(handles.MAG,[2 1 3]),1,[],[]); %add planes to images
+hsurfacesy = slice(X,Y,Z,permute(handles.MAG,[2 1 3]),[],1,[]);
+hsurfacesz = slice(X,Y,Z,permute(handles.MAG,[2 1 3]),[],[],1);
 
 % Turn slice visualization off at first 
-set(hsurfacesy,'FaceColor','interp','EdgeColor','none','visible','off','PickableParts','none')
 set(hsurfacesx,'FaceColor','interp','EdgeColor','none','visible','off','PickableParts','none')
+set(hsurfacesy,'FaceColor','interp','EdgeColor','none','visible','off','PickableParts','none')
 set(hsurfacesz,'FaceColor','interp','EdgeColor','none','visible','off','PickableParts','none')
 colormap gray
 caxis auto
@@ -129,25 +129,25 @@ set(handles.zplaneloc,'Min',0);
 
 %%% Plot isosurface over current figure
 figure(figVis)
-handles.MaskID_struct(1).ISOsurf = patch(isosurface(segmentVis,0.5), ... 
+handles.MaskID_struct(1).ISOsurf = patch(isosurface(permute(segmentVis,[2 1 3]),0.5), ... 
     'FaceAlpha',handles.MaskID_struct(1).ISOvar.alpha);
 set(handles.MaskID_struct(1).ISOsurf,'FaceColor',handles.MaskID_struct(1).ISOvar.color, ...
     'EdgeColor','none','PickableParts','none');
 set(gcf,'color','black'); %set background to black
 axis off tight %remove axis
-view([-1 0.1 0.1]); %set to sag.(offset 0.1 to see cor. and ax. MAG planes)
+view([1 0.1 0.1]); %set to sag.(offset 0.1 to see cor. and ax. MAG planes)
 axis vis3d
 daspect([1 1 1]) %set aspect ratio so not elongated
 set(gca,'zdir','reverse') %flip angiogram upside down (correct orientation)
 camlight headlight; %make isosurface shine
 lighting gouraud %smooth shine
 
-
+[X,Y,Z] = meshgrid(1:size(handles.MAG,2),1:size(handles.MAG,1),1:size(handles.MAG,3)); 
 %%% Plot velocity vectors
 valsUse = logical(segmentVis); %binarize segmentation
 hold on
 vecLength = round(get(handles.vecLengthSlider,'Value')); %vector density
-handles.q = quiver3(X(valsUse),Y(valsUse),Z(valsUse), ... 
+handles.q = quiver3(Y(valsUse),X(valsUse),Z(valsUse), ... 
     -handles.V(valsUse),-handles.U(valsUse),-handles.W(valsUse),vecLength);
 hold off
 
@@ -176,7 +176,7 @@ handles.c = colorbar; %save colorbar in handle
 handles.c.Color = [1 1 1]; %white
 handles.c.LineWidth = 3; %width of colorbar
 handles.c.FontSize = 20; %size of units displayed
-ylabel(handles.c,'Velocity mm/s') %colorbar caption
+ylabel(handles.c,'Velocity cm/sec') %colorbar caption
 set(handles.c,'visible','off') %turn off initially
 
 handles.cMIN = min(handles.mags); %save min vector magnit. as colorbar min
@@ -185,11 +185,12 @@ handles.cMAX = max(handles.mags); %save max vector magnit. as colorbar max
 
 %%% Plot data cursor plane
 hold on 
-handles.hscatter = scatter3(branchListVis(:,2),branchListVis(:,1),branchListVis(:,3), ... 
+handles.hscatter = scatter3(branchListVis(:,1),branchListVis(:,2),branchListVis(:,3), ... 
     'MarkerFaceAlpha',0,'MarkerEdgeAlpha',0); 
 hold off
 dcm_obj_vis = datacursormode(figVis);
 datacursormode on;
+dcm_obj_vis.DisplayStyle = 'window';
 set(dcm_obj_vis,'UpdateFcn',@myupdatefcn_planes)
 dcm_obj_vis.createDatatip(handles.hscatter);
 handles.StructLoc = 1;
@@ -370,7 +371,7 @@ if ~badMaskFlag
     Allplanes =  [handles.MaskID_struct(IDuse).PlanesVis];
     PlanesVis = Allplanes(IDloc,:);
     PlanesVis = reshape(PlanesVis,[size(PlanesVis,1),4,3]);
-    set(handles.hscatter,'XData',branchListVis(:,2),'YData',branchListVis(:,1),'ZData',branchListVis(:,3));
+    set(handles.hscatter,'XData',branchListVis(:,1),'YData',branchListVis(:,2),'ZData',branchListVis(:,3));
     datacursormode on;
 
     delete(findall(gcf,'Type','light'))
@@ -419,7 +420,7 @@ if ~isempty(IDuse)
     Allplanes =  [handles.MaskID_struct(IDuse).PlanesVis];
     PlanesVis = Allplanes(IDloc,:);
     PlanesVis = reshape(PlanesVis,[size(PlanesVis,1),4,3]);
-    set(handles.hscatter,'XData',branchListVis(:,2),'YData',branchListVis(:,1),'ZData',branchListVis(:,3));
+    set(handles.hscatter,'XData',branchListVis(:,1),'YData',branchListVis(:,2),'ZData',branchListVis(:,3));
 end
 
 guidata(hObject, handles);
@@ -502,7 +503,7 @@ segmentVis(handles.MaskID_struct(handles.maskselection.Value).IDX) = 1;
 
 if smoothfactor == '1'
     handles.MaskID_struct(handles.maskselection.Value).ISOsurf  =  ...
-        patch(isosurface(segmentVis,0.5),'FaceAlpha',get(handles.isoaplha, 'Value'));
+        patch(isosurface(permute(segmentVis,[2 1 3]),0.5),'FaceAlpha',get(handles.isoaplha, 'Value'));
     names = get(handles.colorselection, 'String');
     current = get(handles.colorselection, 'Value');
     set(handles.MaskID_struct(handles.maskselection.Value).ISOsurf , ...
@@ -514,7 +515,7 @@ if smoothfactor == '1'
     lighting gouraud
 else
     handles.MaskID_struct(handles.maskselection.Value).ISOsurf = ... 
-        patch(isosurface(smooth3(segmentVis,'box',str2double(smoothfactor)),0.25), ... 
+        patch(isosurface(smooth3(permute(segmentVis,[2 1 3]),'box',str2double(smoothfactor)),0.25), ... 
         'FaceAlpha',get(handles.isoaplha, 'Value'));
     names = get(handles.colorselection, 'String');
     current = get(handles.colorselection, 'Value');
@@ -610,8 +611,8 @@ else
     set(handles.q.Tail,'ColorBinding', 'interpolated', ...
         'ColorData', reshape(cmap(1:2,:,:), [], 4).');
 
-    set(handles.q,'XData',X,'YData',Y,'ZData',Z,'UData',-handles.V(AllIdx), ...
-        'VData',-handles.U(AllIdx),'WData',-handles.W(AllIdx),'PickableParts','none')
+    %set(handles.q,'XData',X,'YData',Y,'ZData',Z,'UData',-handles.V(AllIdx), ...
+        %'VData',-handles.U(AllIdx),'WData',-handles.W(AllIdx),'PickableParts','none')
     set(handles.q,'visible','on')
     set(handles.c,'visible','on')
     set(gca, 'CLim', [min(mags), max(mags)]);
@@ -630,11 +631,11 @@ else
     PlanesVis = reshape(PlanesVis,[size(PlanesVis,1),4,3]);
     
     hold on 
-    handles.hscatter = scatter3(branchListVis(:,2),branchListVis(:,1),branchListVis(:,3), ... 
+    handles.hscatter = scatter3(branchListVis(:,1),branchListVis(:,2),branchListVis(:,3), ... 
     'MarkerFaceAlpha',0,'MarkerEdgeAlpha',0);
     hold off
     
-    set(handles.hscatter,'XData',branchListVis(:,2),'YData',branchListVis(:,1),'ZData',branchListVis(:,3));
+    set(handles.hscatter,'XData',branchListVis(:,1),'YData',branchListVis(:,2),'ZData',branchListVis(:,3));
 end
 
 guidata(hObject, handles);
@@ -686,7 +687,7 @@ handles.c = colorbar;
 handles.c.Color = [1 1 1];
 handles.c.LineWidth = 3;
 handles.c.FontSize = 20;
-ylabel(handles.c, 'Velocity mm/s')
+ylabel(handles.c, 'Velocity cm/sec')
 
 guidata(hObject, handles);
 
@@ -752,7 +753,7 @@ handles.c = colorbar;
 handles.c.Color = [1 1 1];
 handles.c.LineWidth = 3;
 handles.c.FontSize = 20;
-ylabel(handles.c, 'Velocity mm/s')
+ylabel(handles.c, 'Velocity cm/sec')
 guidata(hObject, handles);
 
 % --- Executes during object creation, after setting all properties.
@@ -820,9 +821,9 @@ if ~isempty(IDuse)
     set(handles.q.Tail,'ColorBinding','interpolated', ...
         'ColorData',reshape(cmap(1:2,:,:),[],4).');
 
-    set(handles.q,'XData',X,'YData',Y,'ZData',Z, ... 
-        'UData',-handles.V(AllIdx),'VData',-handles.U(AllIdx), ... 
-        'WData',-handles.W(AllIdx),'PickableParts','none')
+    %set(handles.q,'XData',X,'YData',Y,'ZData',Z, ... 
+        %'UData',-handles.V(AllIdx),'VData',-handles.U(AllIdx), ... 
+        %'WData',-handles.W(AllIdx),'PickableParts','none')
 
     set(gca,'CLim',[min(handles.mags), max(handles.mags)]);
     set(handles.q,'PickableParts','none')
@@ -831,7 +832,7 @@ if ~isempty(IDuse)
     handles.c.Color = [1 1 1];
     handles.c.LineWidth = 3;
     handles.c.FontSize = 20;
-    ylabel(handles.c,'Velocity mm/s')
+    ylabel(handles.c,'Velocity cm/sec')
 
     set(handles.q,'visible','on')
     set(handles.c,'visible','on')
@@ -865,7 +866,7 @@ function vecLengthSlider_Callback(hObject, eventdata, handles)
 global figVis PlanesVis branchListVis segmentVis
 figure(figVis)
 
-delete(handles.q);
+%delete(handles.q);
 
 IDuse = [];
 for z = 1:handles.StructLoc
@@ -879,12 +880,12 @@ if isempty(IDuse)
 else
     AllIdx = unique([handles.MaskID_struct(IDuse).IDX]);
     [Y,X,Z] = ind2sub(size(handles.MAG),AllIdx);
-
+    
     %%% Color Calcs
     % Compute magnitude of the vectors
     hold on
     vecLength = round(get(handles.vecLengthSlider,'Value'));
-    handles.q = quiver3(X,Y,Z,-handles.V(AllIdx),-handles.U(AllIdx), ...
+    handles.q = quiver3(Y,X,Z,-handles.V(AllIdx),-handles.U(AllIdx), ...
         -handles.W(AllIdx),vecLength);
     hold off
 
@@ -916,8 +917,8 @@ else
     set(handles.q.Tail,'ColorBinding', 'interpolated', ...
         'ColorData', reshape(cmap(1:2,:,:), [], 4).');
 
-    set(handles.q,'XData',X,'YData',Y,'ZData',Z,'UData',-handles.V(AllIdx), ...
-        'VData',-handles.U(AllIdx),'WData',-handles.W(AllIdx),'PickableParts','none')
+    %set(handles.q,'XData',X,'YData',Y,'ZData',Z,'UData',-handles.V(AllIdx), ...
+        %'VData',-handles.U(AllIdx),'WData',-handles.W(AllIdx),'PickableParts','none')
     set(handles.q,'visible','on')
     set(handles.c,'visible','on')
     set(gca, 'CLim', [min(mags), max(mags)]);
@@ -936,11 +937,11 @@ else
     PlanesVis = reshape(PlanesVis,[size(PlanesVis,1),4,3]);
 
     hold on 
-    handles.hscatter = scatter3(branchListVis(:,2),branchListVis(:,1),branchListVis(:,3), ... 
+    handles.hscatter = scatter3(branchListVis(:,1),branchListVis(:,2),branchListVis(:,3), ... 
     'MarkerFaceAlpha',0,'MarkerEdgeAlpha',0);
     hold off
 
-    set(handles.hscatter,'XData',branchListVis(:,2),'YData',branchListVis(:,1),'ZData',branchListVis(:,3));
+    set(handles.hscatter,'XData',branchListVis(:,1),'YData',branchListVis(:,2),'ZData',branchListVis(:,3));
 end
 
 if ~handles.MaskID_struct(handles.maskselection.Value).VECvis
@@ -975,8 +976,8 @@ if val == 0
     set(handles.hsurfacesx,'visible','off')
 else
     set(handles.hsurfacesx,'visible','on','FaceLighting','none')
-    sliceNum = 1+round( get(handles.xplaneloc,'Value').*(handles.res(2)-1) );
-    tempIM = squeeze(handles.MAG(:,sliceNum,:));
+    sliceNum = 1+round( get(handles.xplaneloc,'Value').*(handles.res(1)-1) );
+    tempIM = squeeze(handles.MAG(sliceNum,:,:));
     NORMgary = tempIM./max(tempIM(:));
     handles.hsurfacesx.CData = cat(3, NORMgary, NORMgary, NORMgary);
     %ceil(handles.xplaneloc.Value*handles.res(1)
@@ -994,8 +995,8 @@ function xplaneloc_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 % Hints: get(hObject,'Value') returns position of slider
 %        get(hObject,'Min') and get(hObject,'Max') to determine range of slider
-sliceNum = 1+round( get(handles.xplaneloc,'Value').*(handles.res(2)-1) );
-tempIM = squeeze(handles.MAG(:,sliceNum,:));
+sliceNum = 1+round( get(handles.xplaneloc,'Value').*(handles.res(1)-1) );
+tempIM = squeeze(handles.MAG(sliceNum,:,:));
 NORMgary = tempIM./max(tempIM(:));
 handles.hsurfacesx.CData = cat(3, NORMgary, NORMgary, NORMgary);
 handles.hsurfacesx.XData = ones(size(handles.hsurfacesx.XData)).*sliceNum;
@@ -1023,8 +1024,8 @@ if val == 0
     set(handles.hsurfacesy,'visible','off')
 else
     set(handles.hsurfacesy,'visible','on','FaceLighting','none')
-    sliceNum = 1+round( get(handles.yplaneloc,'Value').*(handles.res(1)-1) );
-    tempIM = squeeze(handles.MAG(sliceNum,:,:));
+    sliceNum = 1+round( get(handles.yplaneloc,'Value').*(handles.res(2)-1) );
+    tempIM = squeeze(handles.MAG(:,sliceNum,:));
     NORMgary = tempIM./max(tempIM(:));
     handles.hsurfacesy.CData = cat(3, NORMgary, NORMgary, NORMgary);
     handles.hsurfacesy.YData = ones(size(handles.hsurfacesy.YData)).*sliceNum;
@@ -1041,8 +1042,8 @@ function yplaneloc_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 % Hints: get(hObject,'Value') returns position of slider
 %        get(hObject,'Min') and get(hObject,'Max') to determine range of slider
-sliceNum = 1+round( get(handles.yplaneloc,'Value').*(handles.res(1)-1) );
-tempIM = squeeze(handles.MAG(sliceNum,:,:));
+sliceNum = 1+round( get(handles.yplaneloc,'Value').*(handles.res(2)-1) );
+tempIM = squeeze(handles.MAG(:,sliceNum,:));
 NORMgary = tempIM./max(tempIM(:));
 handles.hsurfacesy.CData = cat(3, NORMgary, NORMgary, NORMgary);
 handles.hsurfacesy.YData = ones(size(handles.hsurfacesy.YData)).*sliceNum;
@@ -1071,7 +1072,7 @@ if val == 0
 else
     set(handles.hsurfacesz,'visible','on','FaceLighting','none')
     sliceNum = 1+round( get(handles.zplaneloc,'Value').*(handles.res(3)-1) );
-    tempIM = squeeze(handles.MAG(:,:,sliceNum));
+    tempIM = squeeze(handles.MAG(:,:,sliceNum))';
     NORMgary = tempIM./max(tempIM(:));
     handles.hsurfacesz.CData = cat(3, NORMgary, NORMgary, NORMgary);
     handles.hsurfacesz.ZData = ones(size(handles.hsurfacesz.ZData)).*sliceNum;
@@ -1089,7 +1090,7 @@ function zplaneloc_Callback(hObject, eventdata, handles)
 % Hints: get(hObject,'Value') returns position of slider
 %        get(hObject,'Min') and get(hObject,'Max') to determine range of slider    
 sliceNum = 1+round( get(handles.zplaneloc,'Value').*(handles.res(3)-1) );
-tempIM = squeeze(handles.MAG(:,:,sliceNum));
+tempIM = squeeze(handles.MAG(:,:,sliceNum))';
 NORMgary = tempIM./max(tempIM(:)); %https://normangary.com/
 handles.hsurfacesz.CData = cat(3, NORMgary, NORMgary, NORMgary);
 handles.hsurfacesz.ZData = ones(size(handles.hsurfacesz.ZData)).*sliceNum;
@@ -1162,8 +1163,8 @@ pindex = zeros(size(ptList,1),1);
 
 % Find cursor point in branchList
 for n = 1:size(ptList,1)
-    xIdx = find(branchListVis(:,1) == ptList(n,2));
-    yIdx = find(branchListVis(xIdx,2) == ptList(n,1));
+    xIdx = find(branchListVis(:,1) == ptList(n,1));
+    yIdx = find(branchListVis(xIdx,2) == ptList(n,2));
     zIdx = find(branchListVis(xIdx(yIdx),3) == ptList(n,3));
     pindex(n) = xIdx(yIdx(zIdx));
 end
@@ -1173,7 +1174,7 @@ bnum = branchListVis(pindex,4);
 
 hold on  
 %Update Planes for points
-pVis = fill3(PlanesVis(pindex,:,2)',PlanesVis(pindex,:,1)',PlanesVis(pindex,:,3)', ...
+pVis = fill3(PlanesVis(pindex,:,1)',PlanesVis(pindex,:,2)',PlanesVis(pindex,:,3)', ...
     [0 0 1],'EdgeColor',[0 0 1],'FaceAlpha',1,'Visible','on', ...
     'PickableParts','none','Parent', figVis.Children(2)); 
 % fill3(pty',ptx',ptz','r') when used with isosurface
