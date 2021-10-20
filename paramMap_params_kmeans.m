@@ -1,11 +1,11 @@
 function [area_val,diam_val,flowPerHeartCycle_val,maxVel_val,PI_val,RI_val,flowPulsatile_val,...
     velMean_val,VplanesAllx,VplanesAlly,VplanesAllz,r,timeMIPcrossection,segmentFull,...
     vTimeFrameave,MAGcrossection,bnumMeanFlow,bnumStdvFlow,StdvFromMean,Planes] ...
-    = paramMap_params_kmeans(filetype,branchList,matrix,timeMIP,vMean, ...
+    = paramMap_params_kmeans(filetype,branchList,matrix,timeMIP,vMean,back,...
     BGPCdone,directory,nframes,res,MAG,IDXstart,IDXend,handles)
 %PARAMMAP_PARAMS_NEW: Create tangent planes and calculate hemodynamics
+%   Based on a k-means segmentation algorithm implemented by Eric Schrauben
 %   Used by: loadpcvipr.m
-%   Dependencies: slidingThreshold.m
 
 %% Tangent Plane Creation
 set(handles.TextUpdate,'String','Creating Tangent Planes');drawnow;
@@ -257,7 +257,7 @@ idCOL = reshape(ROW+COL,[1 numel(ROW)]); %interp query points
 
 for j = 1:nframes
     if strcmp(filetype,'dat')
-        set(handles.TextUpdate,'String',['Calculating Quantitative Parameters Time Frame: ' num2str(j) '/' num2str(nframes)]);drawnow;
+        set(handles.TextUpdate,'String',['Calculating Quantitative Params Frame: ' num2str(j) '/' num2str(nframes)]);drawnow;
 
         % Load x,y,z components of velocity - single frame
         vx = load_dat(fullfile(directory, ['ph_' num2str(j-1,'%03i') '_vd_1.dat']),[matrix(1) matrix(2) matrix(3)]);
@@ -268,6 +268,13 @@ for j = 1:nframes
         vz = vz(IDXstart(1):IDXend(1),IDXstart(2):IDXend(2),IDXstart(3):IDXend(3)); 
         vx = vx(IDXstart(1):IDXend(1),IDXstart(2):IDXend(2),IDXstart(3):IDXend(3));
         vy = vy(IDXstart(1):IDXend(1),IDXstart(2):IDXend(2),IDXstart(3):IDXend(3));
+        
+        % Correct background phase (if autoBGPC_flag is off)
+        if ~BGPCdone
+            vx = vx - back(:,:,:,1); %subtract off background phase in x-dir
+            vy = vy - back(:,:,:,2);
+            vz = vz - back(:,:,:,3);
+        end 
         
     else
         set(handles.TextUpdate,'String',['Calculating Quantitative - Parameters Time Frame: ' num2str(j) '/' num2str(nframes)]);drawnow;
@@ -286,19 +293,24 @@ for j = 1:nframes
             [IDXstart(1),IDXstart(2),IDXstart(3)], ...
             [IDXend(1)-IDXstart(1)+1,IDXend(2)-IDXstart(2)+1,IDXend(3)-IDXstart(3)+1]));
         
-        %{ 
+        % Correct background phase (if autoBGPC_flag is off)
+        if ~BGPCdone
+            vx = vx - back(:,:,:,1); %subtract off background phase in x-dir
+            vy = vy - back(:,:,:,2);
+            vz = vz - back(:,:,:,3);
+        end 
+        
         %use for flow python
         % Load x,y,z components of velocity (cropped) - single frame
-        vx = h5read(fullfile(directory,'Flow.h5'),'/VX', ... 
-            [IDXstart(1),IDXstart(2),IDXstart(3),j], ...
-            [IDXend(1)-IDXstart(1)+1,IDXend(2)-IDXstart(2)+1,IDXend(3)-IDXstart(3)+1,1]);
-        vy = h5read(fullfile(directory,'Flow.h5'),'/VY', ... 
-            [IDXstart(1),IDXstart(2),IDXstart(3),j], ...
-            [IDXend(1)-IDXstart(1)+1,IDXend(2)-IDXstart(2)+1,IDXend(3)-IDXstart(3)+1,1]);
-        vz = h5read(fullfile(directory,'Flow.h5'),'/VZ', ... 
-            [IDXstart(1),IDXstart(2),IDXstart(3),j], ...
-            [IDXend(1)-IDXstart(1)+1,IDXend(2)-IDXstart(2)+1,IDXend(3)-IDXstart(3)+1,1]);
-        %}
+%         vx = h5read(fullfile(directory,'Flow.h5'),'/VX', ... 
+%             [IDXstart(1),IDXstart(2),IDXstart(3),j], ...
+%             [IDXend(1)-IDXstart(1)+1,IDXend(2)-IDXstart(2)+1,IDXend(3)-IDXstart(3)+1,1]);
+%         vy = h5read(fullfile(directory,'Flow.h5'),'/VY', ... 
+%             [IDXstart(1),IDXstart(2),IDXstart(3),j], ...
+%             [IDXend(1)-IDXstart(1)+1,IDXend(2)-IDXstart(2)+1,IDXend(3)-IDXstart(3)+1,1]);
+%         vz = h5read(fullfile(directory,'Flow.h5'),'/VZ', ... 
+%             [IDXstart(1),IDXstart(2),IDXstart(3),j], ...
+%             [IDXend(1)-IDXstart(1)+1,IDXend(2)-IDXstart(2)+1,IDXend(3)-IDXstart(3)+1,1]);
     end 
     
     % Interpolation of time-resolved velocities

@@ -23,7 +23,7 @@ function varargout = paramMap(varargin)
 %
 % See also: GUIDE, GUIDATA, GUIHANDLES
 % Edit the above text to modify the response to help paramMap
-% Last Modified by GUIDE v2.5 23-Aug-2021 09:13:02
+% Last Modified by GUIDE v2.5 20-Oct-2021 09:43:48
 
 % Developed by Carson Hoffman, University of Wisconsin-Madison 2019
 %   Used by: NONE (START FILE)
@@ -241,9 +241,8 @@ else
     gating_table = table(gating_stats,val);
     writetable(gating_table,[SavePath filesep 'gating_stats.csv'],'Delimiter',',');
     
-    
     set(handles.TextUpdate,'String','Data Successfully Saved'); drawnow;
-    pause(1)
+    pause(0.5)
     set(handles.TextUpdate,'String','Please Select Analysis Plane Location'); drawnow;
 end
 
@@ -1047,3 +1046,13 @@ txt = {['Point Label: ' , PointLabel , sprintf('\n'), ...
     Labeltxt{2,1},sprintf('%0.3f',mean(average)),Labeltxt{2,2},sprintf('\n'), ...
     'Current Branch #: ',sprintf('%i',CurrentNum),sprintf('\n') ...
     'Label Number: ', sprintf('%i',bnum)]};
+
+
+% --- Executes when user attempts to close ParameterTool.
+function ParameterTool_CloseRequestFcn(hObject, eventdata, handles)
+% hObject    handle to ParameterTool (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: delete(hObject) closes the figure
+delete(hObject);
