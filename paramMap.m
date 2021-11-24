@@ -23,7 +23,7 @@ function varargout = paramMap(varargin)
 %
 % See also: GUIDE, GUIDATA, GUIHANDLES
 % Edit the above text to modify the response to help paramMap
-% Last Modified by GUIDE v2.5 20-Oct-2021 09:43:48
+% Last Modified by GUIDE v2.5 28-Oct-2021 09:57:19
 
 % Developed by Carson Hoffman, University of Wisconsin-Madison 2019
 %   Used by: NONE (START FILE)
@@ -106,6 +106,8 @@ d = dir([directory filesep '*.mat']);
 fn = [{'Load New Case'},{d.name}];
 [fileIndx,~] = listdlg('PromptString','Select a file:', ...
     'ListSize',[200 300],'SelectionMode','single','ListString',fn);
+
+set(handles.directoryName,'String',directory);
 
 %%% Data Loading
 if  fileIndx > 1  %if a pre-processed case is selected
@@ -226,9 +228,9 @@ else
     warning off
     mkdir(directory,SummaryName); %makes directory if it already exists
     
-    % Where to save data images and excel summary files
+    % Where to save data, images, and excel summary files
     SavePath = [directory filesep SummaryName];
-        
+
     % Create excel files save summary data
     col_header = ({'Vessel Label', 'Centerline Point', 'Notes',['Max Velocity < ' num2str(VENC) 'cm/s'], ...
         'Mean Flow ml/s','Pulsatility Index','Branch Label'});
@@ -1056,3 +1058,13 @@ function ParameterTool_CloseRequestFcn(hObject, eventdata, handles)
 
 % Hint: delete(hObject) closes the figure
 delete(hObject);
+
+
+% --- Executes on button press in pwvButton.
+function pwvButton_Callback(hObject, eventdata, handles)
+% hObject    handle to pwvButton (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+global branchList res timeres flowPulsatile_val SavePath 
+
+pwvTool(branchList,res,timeres,flowPulsatile_val,SavePath);

@@ -155,7 +155,9 @@ end
 %% Create Angio
 % Calculate complex difference angiogram for visualization.
 set(handles.TextUpdate,'String','Creating Angiogram'); drawnow;
-timeMIP = calc_angio(MAG, vMean, VENC);
+%timeMIP = calc_angio(MAG, vMean, VENC);
+timeMIP = load_dat('CD.dat',[matrix(1) matrix(2) matrix(3)]);
+timeMIP = timeMIP(IDXstart(1):IDXend(1),IDXstart(2):IDXend(2),IDXstart(3):IDXend(3));
 % NOTE: timeMIP is an approximated complex difference image.
 % The result is nearly equivalent to loading 'CD.dat'.
 
