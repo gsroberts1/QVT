@@ -66,7 +66,8 @@ handles.output = hObject;
 
 % Update handles structure
 guidata(hObject, handles);
-
+movegui(handles.figure1,'southwest'); %move to bottom left (WORK)
+%set(handles.figure1,'Position',[281 10 190 18]); %move to bottom left (HOME)
 
 %%% Loading Data
 load(caseFilePath,'imageData') %load data_struct
@@ -95,6 +96,8 @@ clear imageData
 
 %%% Create magnitude image planes for slice visualizations
 figVis = figure('CloseRequestFcn',@my_closereq); %open second figure
+set(figVis,'Position',[1006 43 902 692]); %WORK
+%set(figVis,'Position',[2367 20 902 692]); %HOME
 
 [X,Y,Z] = meshgrid(1:size(handles.MAG,1),1:size(handles.MAG,2),1:size(handles.MAG,3)); 
 hold on     
