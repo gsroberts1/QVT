@@ -1,81 +1,88 @@
-% This script reads and displays gating track information.
+%% This script reads and displays MRI gating track information.
 
 % Author: Grant Roberts
 % Date: September 18 2019
+% Updated: December 15 2021
 
-% Fully functional when Gating_Track_xxxxxxxx.pcvipr_track is present. 
+% Fully functional for following files:
+%   ecg_track_xxxxxx (oldest)
+%   Gating_Track_xxxxxx.pcvipr_track (newer)
+%   Gating_Track_xxxxxx.pcvipr_track + Gating_Track_xxxxxx.pcvipr_track.full
+%   ScanArchive Gating Files (newest)
+%       ECG2Data,ECG2Trig,ECG3Data,ECG3Trig,PPGData,PPGTrig,RESPData,
+%       RESPTrig,Gating_Track,Gating_Track_Full
+
 
 %% Filter Gating Directory
 gatingDir = uigetdir(pwd, 'Select the directory with the gating tracks');
 cd(gatingDir) % move to this directory
 
-fullDir = dir; % get all files in this directory
-% remove all checksum and h5 files
-keepFiles = ~(contains({fullDir.name},'.md5sum') | contains({fullDir.name},'.h5'))';
-filtDir = fullDir(keepFiles); % filter out md5sum and h5 files
-fileNames = {filtDir.name}'; % get filenames from filtered directory
-filesLoaded = {}; % create a cell to add loaded file names
-ecgData.gatingDir = gatingDir; % add gating directory to a composite data structure
+fullDir = dir(); 
+keepFiles = ~(contains({fullDir.name},'.md5sum') | contains({fullDir.name},'.h5'))'; 
+filtDir = fullDir(keepFiles); %filter out md5sum and h5 files
+fileNames = {filtDir.name}'; %get filenames from filtered directory
+filesLoaded = {}; %initialize cell array to add loaded gating tracks
+ecgData.gatingDir = gatingDir; %add master dir to composite data structure
 diary ecgInformation.txt % start writing command window output to text file
 
 
-
 %% Gating Tracks
-badProspGating=0;
-
-%Load Full Gating Track - Shows full gating information
-idx = find(contains(fileNames,'pcvipr_track.full')); % does this file exist in fileNames?
-if ~isempty(idx) % if we found something..
-    name = fileNames{idx}; % grab name from fileNames
+badProspGating=0; %flag for bad prospectively-gated tracks
+idx = find(contains(fileNames,'pcvipr_track.full')); %find in fileNames
+if ~isempty(idx) %if we found a full gating track
+    name = fileNames{idx}; %grab name from fileNames
     fid = fopen(name);
     gate = fread(fid,'int32','b');
     gate = reshape(gate,[numel(gate)/5 5]); % data is Nx5 format
-    gate = sortrows(gate,3); % organize time chronologically (if not already)
+    gate = sortrows(gate,3); % organize time chronologically
     fclose(fid);
 
     % Put data into gatingTrackFull structure
     gatingTrackFull.ecg = gate(:,1); % ecg (sawtooth) waveform
     gatingTrackFull.resp = 4095-gate(:,2); % resp waveform (12bit max)
-    gatingTrackFull.time = gate(:,3)/1e3; % time at each data point (ms)
+    gatingTrackFull.time = gate(:,3)-gate(1,3); % time at each data point (ms)
+    scale = floor(log(abs(gate(2,3)))./log(10));
+    gatingTrackFull.time = gatingTrackFull.time/10^scale;
     gatingTrackFull.prep = gate(:,4); % unsure what this is
-    gatingTrackFull.acq = gate(:,5); % data point acquisition number
-    
-    % stats before cleaning data (currently only gating track (full and nonfull) supported)
-    gatingTrackFull.unclean = 2*median(gatingTrackFull.ecg);% use all data to get some statistics, this is the RR interval
-    within_rr = gatingTrackFull.ecg < gatingTrackFull.unclean;
+    gatingTrackFull.acq = gate(:,5); % projection # tag for each encode
+
+    % GATING STATS MATCHING RECON OUTPUT -- NEEDS ADJUSTMENT
+    reconRR = 2*median(gatingTrackFull.ecg);% use all data to get some statistics, this is the RR interval
+    within_rr = gatingTrackFull.ecg < reconRR;
     ecg_filtered = gatingTrackFull.ecg(within_rr);
     sum_within = size(ecg_filtered,1);
     sum_total = size(gatingTrackFull.ecg,1);
-    gatingTrackFull.pct_within_rr = 100.0*sum_within / sum_total;  
-    gatingTrackFull.uncleanbpm = 60000./(gatingTrackFull.unclean); 
-    
-    [rrFull, peaksFull] = getRR(gatingTrackFull.ecg); % get all rr intervals
-        gatingTrackFull.rr = (nan(size(gate,1),1)); % expand rr vector to match gate lengths
-        gatingTrackFull.rr(peaksFull) = rrFull; % fill in expanded Nan vector with rrs
-    encodeLength = mode(hist(gatingTrackFull.acq,unique(gatingTrackFull.acq))); % get encoding type (5-point e.g.)
-        gatingTrack.encodeLength = encodeLength;
-    [missedHBidx,earlyTrigIdx] = findMissedHB(rrFull,peaksFull); % detect missed heartbeats and early triggers
+    reconWithinRR = 100.0*(sum_within/sum_total);  
+    reconBPM = 60000./reconRR; 
+
+    % Get all RR intervals
+    [rrFull, peaksFull] = getRR(gatingTrackFull.ecg); 
+        gatingTrackFull.rr = (nan(size(gate,1),1)); %expand rr vector to match gate lengths
+        gatingTrackFull.rr(peaksFull) = rrFull; %fill in expanded Nan vector with rrs
+        encodeLength = mode(hist(gatingTrackFull.acq,unique(gatingTrackFull.acq))); %get encoding type (5-point e.g.)
+    % Detect missed HBs and early triggers (Jacob Macdonald/Grant Roberts)
+    [missedHBidx,earlyTrigIdx] = findMissedHB(rrFull,peaksFull); 
         numMissedFull = length(missedHBidx);
         numEarlyFull = length(earlyTrigIdx);
-        missedHBs = nan(length(gatingTrackFull.rr),1); % expand vector to match gate lengths
-        earlyTrigs = nan(length(gatingTrackFull.rr),1); % expand vector to match gate lengths
-        missedHBs(missedHBidx) = gatingTrackFull.rr(missedHBidx); % fill in expanded vector with missed HBs
-        earlyTrigs(earlyTrigIdx) = gatingTrackFull.rr(earlyTrigIdx); % fill in expanded vector early triggers
+        missedHBs = nan(length(gatingTrackFull.rr),1); %expand to match gate lengths
+        earlyTrigs = nan(length(gatingTrackFull.rr),1); %expand to match gate lengths
+        missedHBs(missedHBidx) = gatingTrackFull.rr(missedHBidx); %fill in with missed HBs
+        earlyTrigs(earlyTrigIdx) = gatingTrackFull.rr(earlyTrigIdx); %fill in with early triggers
         gatingTrackFull.missed = missedHBs;
         gatingTrackFull.early = earlyTrigs;
         gatingTrackFull.clean = gatingTrackFull.rr;
-        gatingTrackFull.clean(missedHBidx) = nan;
-        gatingTrackFull.clean(earlyTrigIdx) = nan; % data which has missed HB and early trigger events removed
-        gatingTrackFull.bpm = 60000./(gatingTrackFull.clean); % convert rr (ms) to heartrate (bpm)
-              
-    fileNames(idx) = []; % clear name from filName list to allow next gating track to be loaded.
-    filesLoaded = [filesLoaded, name]; % add file to loaded files running cell
-    ecgData.gatingTrackFull = gatingTrackFull; % composite structure containing all information
+        gatingTrackFull.clean(missedHBidx) = nan; %remove missed HBs
+        gatingTrackFull.clean(earlyTrigIdx) = nan; % remove early triggers
+        gatingTrackFull.bpm = 60000./gatingTrackFull.clean; %convert RR(ms) to BPM
+
+    fileNames(idx) = []; %clear name from filName for next gating track
+    filesLoaded = [filesLoaded, name]; %add file to loaded files running cell
+    ecgData.gatingTrackFull = gatingTrackFull; %composite structure containing all information
 end
 
-%Load Gating Track - Shows nly prospectively acquired gating data
-idx = find(contains(fileNames,'pcvipr_track'));
-if ~isempty(idx)      
+%Load Gating Track - Shows only prospectively acquired gating data
+idx = find(contains(fileNames,'pcvipr_track')); %find in fileNames
+if ~isempty(idx)  
     name = fileNames{idx};
     fid = fopen(name);
     gate = fread(fid,'int32','b');
@@ -86,22 +93,26 @@ if ~isempty(idx)
     % Put data into gatingTrack structure
     gatingTrack.ecg = gate(:,1);
     gatingTrack.resp = 4095-gate(:,2);
-    gatingTrack.time = gate(:,3)/1e3;
+    gatingTrack.time = gate(:,3)-gate(1,3);
+    scale = floor(log(abs(gate(2,3)))./log(10));
+    gatingTrack.time = gatingTrack.time/10^scale;
     gatingTrack.prep = gate(:,4);
     gatingTrack.acq = (1:size(gate,1))'; % generate a data acquisition row
-    
-    % stats before cleaning data (currently only gating track (full and nonfull) supported)
-    gatingTrack.unclean = 2*median(gatingTrack.ecg);% use all data to get some statistics, this is the RR interval
-    within_rr = gatingTrack.ecg < gatingTrack.unclean;
+
+    % GATING STATS MATCHING RECON OUTPUT -- NEEDS ADJUSTMENT
+    reconRR = 2*median(gatingTrack.ecg);% use all data to get some statistics, this is the RR interval
+    within_rr = gatingTrack.ecg < reconRR;
     ecg_filtered = gatingTrack.ecg(within_rr);
     sum_within = size(ecg_filtered,1);
     sum_total = size(gatingTrack.ecg,1);
-    gatingTrack.pct_within_rr = 100.0*sum_within / sum_total;  
-    gatingTrack.uncleanbpm = 60000./(gatingTrack.unclean);
-    
+    reconWithinRR = 100.0*(sum_within/sum_total);  
+    reconBPM = 60000./reconRR; 
+
+    % Get all RR intervals
     [rr, peaks] = getRR(gatingTrack.ecg);
         gatingTrack.rr = (nan(size(gate,1),1));
         gatingTrack.rr(peaks) = rr;
+    % Detect missed HBs and early triggers (Jacob Macdonald/Grant Roberts)
     [missedHBidx,earlyTrigIdx] = findMissedHB(rr,peaks);
         numMissed = length(missedHBidx);
         numEarly = length(earlyTrigIdx);
@@ -117,21 +128,22 @@ if ~isempty(idx)
         gatingTrack.bpm = 60000./gatingTrack.clean;
     filesLoaded = [filesLoaded;name];
     ecgData.gatingTrack = gatingTrack;
-    if mode(gatingTrack.time)==0 % if the data is not being acquired for most of the scan
-        fprintf('Error during acqusition.\n'); % then we have an issue with the prospective gating.
+    
+    % If data is not being acquired for most of scan, check prosp. gating
+    if mode(gatingTrack.time)==0 
+        fprintf('Error during acqusition.\n');
         fprintf('The pcvipr_track file shows that data was not being acquired consistently. Script may crash.\n');
         return % kick us out
     end 
 end
 
-if sum(contains(filesLoaded,'pcvipr_track'))==2 % if we have both ".pcvipr_track" and ".pcvipr_track.full" files..
-    if gatingTrackFull.time(end) < gatingTrack.time(end) % if the end times don't match up..
-        badProspGating=1; % then the prospective gating was bad.
+% If "pcvipr_track" and "pcvipr_track.full" present, check prosp. gating
+if sum(contains(filesLoaded,'pcvipr_track'))==2 
+    if gatingTrackFull.time(end) < gatingTrack.time(end) %if end times don't match up..
+        badProspGating = 1; % then the prospective gating likely was bad.
         fprintf('The .pcvipr_track file shows that the time of acquisition is larger than the time of the full waveform.\n')
-        fprintf('This is likely an acquisition an error from dysfunctional prospective gating. Script may crash.\n\n');
     end 
 end 
-
 
 
 %% ECG Track (old gating)
@@ -252,13 +264,10 @@ if ~isempty(ecgIdx) % if we found something..
         ecgTrack.clean(earlyTrigIdx) = nan; % rr data without missed HBs and early triggers
         ecgTrack.bpm = 60000./(ecgTrack.clean); % convert rr (ms) to heartrate (bpm)
     filesLoaded = [filesLoaded;ecgName]; % add file to loaded files running cell
-
 end
 
 
-
 %% Complete ECG, PPG, Respiratory Waveforms
-
 % Second ECG Lead - Full Waveform. If PPG gated, this will be noise.
 idx = find(contains(fileNames,'ECG2Data')); % does this file exist in fileNames?
 if ~isempty(idx) % if we found something..
@@ -298,9 +307,7 @@ if ~isempty(idx)
 end 
 
 
-
 %% Recorded ECG, PPG, Respiratory Triggers
-
 % QRS Triggers from Second ECG Lead. If PPG gated, this will be noise.
 idx = find(contains(fileNames,'ECG2Trig'));  % does this file exist in fileNames?
 if ~isempty(idx) % if we found something..
@@ -339,27 +346,32 @@ if ~isempty(idx)
 end 
 
 
-
 %% Plotting (just gating track, no full)
-if sum(contains(filesLoaded,'pcvipr_track'))==1 || badProspGating % only the "pcvipr_track" file was loaded or we have bad gating..
-    dt = diff(gatingTrack.time); % take derivative of time vector
-    timeres = mode(dt); % find time resolution by finding most common value
-    iterator = round(gatingTrack.time/timeres); % get number of "should be" data points. gatingTrack doesn't include data if acquisition isn't on.
-    respOn = nan(iterator(end),1); % create expanded resp vector
-    gateOn = nan(iterator(end),1); % create expanded rr interval vector
-    expandedTime = (0:timeres:gatingTrack.time(end))'; % create expanded time vector, filling in missing timepoints
+if sum(contains(filesLoaded,'pcvipr_track'))==1 || badProspGating %only "pcvipr_track" file was loaded or bad gating..
+    timeres = mode(diff(gatingTrack.time)); %find time resolution by finding most common value
+    iterator = round(gatingTrack.time/timeres)+1; %get number of "should be" data points. gatingTrack doesn't include data if acquisition isn't on.
+    respOn = nan(iterator(end),1); %create expanded resp vector
+    gateOn = nan(iterator(end),1); %create expanded rr interval vector
+    expandedTime = (0:timeres:gatingTrack.time(end))'; %filling in missing timepoints
 
     for i=1:length(iterator)
-        respOn(iterator(i)) = gatingTrack.resp(i); % place known respiratory data in expanded respOn vector
-        gateOn(iterator(i)) = gatingTrack.rr(i); % place known ecg data in expanded gateOn vector
+        respOn(iterator(i)) = gatingTrack.resp(i); 
+        gateOn(iterator(i)) = gatingTrack.rr(i); 
     end 
-    gatingTrack.timeres = timeres; % save time resolution
-    gatingTrack.respOn = respOn; % save respiratory on time
-    gatingTrack.gateOn = gateOn; % save ecg on time
+    gatingTrack.timeres = timeres; %save time resolution
+    gatingTrack.respOn = respOn;   %save respiratory on-time
+    gatingTrack.gateOn = gateOn;   %save ecg on-time
+    
+    if length(expandedTime)>length(GatingTrack.time)
+        fprintf('    Gating Type: Prospective Gating\n');
+        fprintf('    Percent Data Acquired: %7.2f %%\n', 100*length(gatingTrack.time)/length(expandedTime));    
+    else
+        fprintf('    Gating Type: Retrospective Gating\n');
+    end 
 
     % Respiratory Subfigure
-    figure; hFig = figure(1); set(hFig, 'Position', [50 50 1800 800]); % enlarge figure
-    sgtitle('Gating Track Information'); % create overall title
+    figure; hFig = figure(1); set(hFig, 'Position', [50 50 1800 800]); %enlarge figure
+    sgtitle('Gating Track Information'); %create overall title
     subplot(2,1,1); hold on; title('Respiratory Waveforms'); % make subplot and subplot title
     plot(expandedTime/1000,respOn,'Color',[0, 0.5, 0.19],'LineWidth',2); % plot expanded respiratory waveform
     xlabel('Time (s)'); ylabel('Respiratory Amplitude (a.u.)');
@@ -386,50 +398,90 @@ if sum(contains(filesLoaded,'pcvipr_track'))==1 || badProspGating % only the "pc
     xlabel('RR-interval (ms)'); ylabel('Frequency (counts)'); title('Histogram of RR intervals');
     savefig('gatingTrack_histogram'); % save this figure
     
-    
-    %%%%% Command Line Output %%%%%
-    fprintf('ECG/PG Gating Information and Statistics:\n') 
-    fprintf('\n');
-    fprintf('    Time: \t \t \t \t %s\n',datetime('now'));
-    fprintf('    Directory: \t \t \t %s\n',gatingDir);
-    for i=1:length(filesLoaded)
-        fprintf('    Files Loaded: \t \t %s\n',filesLoaded{i});
-    end 
-    fprintf('\n');
-    if length(expandedTime)>length(gatingTrack.time)
-        fprintf('    Gating Type: \t \t \t \t \t \t Prospective Gating\n');
-        fprintf('    Percent Data Acquired: \t \t \t \t %7.2f %%\n', 100*length(gatingTrack.time)/length(expandedTime));    
-    else
-        fprintf('    Gating Type: \t \t \t \t \t Retrospective Gating\n');
-    end 
-    fprintf('    ECG/Resp. time resolution: \t \t \t %7.2f ms.\n',gatingTrack.timeres);
-    fprintf('    Duration: \t \t \t \t \t \t \t %7.2f s.\n',gatingTrack.time(end)/1000);
-    fprintf('\n');
-    fprintf('    Mean RR interval: \t \t \t \t \t %7.2f ms.\n',nanmean(gatingTrack.clean));
-    fprintf('    Median RR interval: \t \t \t \t %7.2f ms.\n',nanmedian(gatingTrack.clean));
-    fprintf('    Standard deviation: \t \t \t \t %7.2f ms.\n',nanstd(gatingTrack.clean));
-    fprintf('    Range: \t \t \t \t \t \t \t \t %7.2f ms.\n',range(gatingTrack.clean));
-    fprintf('\n');
-    fprintf('    Mean heart rate: \t \t \t \t \t %7.2f bpm.\n',nanmean(gatingTrack.bpm));
-    fprintf('    Median heart rate: \t \t \t \t \t %7.2f bpm.\n',nanmedian(gatingTrack.bpm));
-    fprintf('    Standard deviation: \t \t \t \t %7.2f bpm.\n',nanstd(gatingTrack.bpm));
-    fprintf('    Range: \t \t \t \t \t \t \t \t %7.2f bpm.\n',range(gatingTrack.bpm));
-    fprintf('    Total Recorded heartbeats: \t \t \t \t %d beats.\n',length(peaks));
-    fprintf('    Estimated # missed heartbeats: \t \t \t \t %d beats (%2.2f%%).\n',numMissed,100*(numMissed/length(peaks)));
-    fprintf('    Estimated # early triggers: \t \t \t \t %d beats (%2.2f%%).\n\n',numEarly,100*(numEarly/length(peaks)));
-        
-    fprintf('!!ECG/PG Gating Statistics using ALL DATA:!!\n') 
-    fprintf('    All data Median RR: \t \t \t \t %7.2f ms.\n',nanmedian(gatingTrack.unclean));
-    fprintf('    All data expected heart rate: \t \t %7.2f bpm.\n',nanmedian(gatingTrack.uncleanbpm));
-    fprintf('    Values within expected RR: \t \t \t %7.2f %%.\n\n',nanmedian(gatingTrack.pct_within_rr));
-    
-    gating_stats = {'Median RR (ms)'; 'HR (bpm)';'Values within expected RR (%)'; 'Total Recorded heartbeats';'Estimated # missed heartbeats (%)';'Estimated # early triggers (%)'};
-    val = [nanmedian(gatingTrack.unclean); round(nanmedian(gatingTrack.uncleanbpm));round(nanmedian(gatingTrack.pct_within_rr)); length(peaks); round(100*(numMissed/length(peaks)),2);round(100*(numEarly/length(peaks)),2)];
-    export_table = table(gating_stats,val)
-    writetable(export_table,'gating_stats.csv','Delimiter',',')
+    outputResults(gatingTrack); 
 end 
+    
+
+%% Plotting (with full gating track)
+if sum(contains(filesLoaded,'pcvipr_track'))==2 % if we have both ".pcvipr_track" and ".pcvipr_track.full" files..
+    if mod(length(gatingTrackFull.acq),length(gatingTrack.acq))==0 % if gatingTrackFull.acq is a multiple of the gatingTrack.acq
+        prospectiveGating = 0; % set prospective gating flag to false
         
+        timeres = mode(diff(gatingTrackFull.time));
+        timeresFull = mode(diff(gatingTrackFull.time));
+        iterator = round(gatingTrackFull.time/timeres)+1;
+        expandedTime = gatingTrackFull.time;
+        respOn = nan(iterator(end),1);
+        gateOn = nan(iterator(end),1);
+        %iterator = iterator(encodeLength:encodeLength:end);
+        for i=1:length(iterator)
+            respOn(iterator(i)) = gatingTrackFull.resp(i);
+            gateOn(iterator(i)) = gatingTrackFull.rr(i);
+        end 
         
+    else
+        prospectiveGating = 1; % set flag to true
+        
+        timeres = mode(diff(gatingTrack.time));
+        timeresFull = mode(diff(gatingTrackFull.time));
+        iterator = round(gatingTrack.time/timeres)+1;
+        respOn = nan(iterator(end),1);
+        gateOn = nan(iterator(end),1);
+        expandedTime = gatingTrackFull.time(encodeLength:encodeLength:end);
+        
+        for i=1:length(iterator)
+            respOn(iterator(i)) = gatingTrack.resp(i);
+            gateOn(iterator(i)) = gatingTrack.rr(i);
+        end 
+        
+        if ~(length(respOn)==length(expandedTime)) % if the expanded vectors are not equal to the expanded time vectors..
+            disp('Acquisition error. The pcvipr_track file shows that data was not being acquired consistently. Script may crash.');
+            return % this happens if there are errors with scan acquisition
+        end 
+    end
+    gatingTrack.timeres = timeres;
+    gatingTrackFull.timeres = timeresFull;
+    gatingTrack.respOn = respOn;
+    gatingTrack.gateOn = gateOn;
+
+    % Respiratory Subfigure
+    figure; hFig = figure(1); set(hFig, 'Position', [50 50 1800 800]);
+    sgtitle('Gating Track and Full Gating Track Information'); 
+    subplot(2,1,1); hold on; title('Respiratory Waveforms');
+    plot(expandedTime/1000,respOn,'Color',[0, 0.5, 0.19],'LineWidth',2); 
+    xlabel('Time (s)'); ylabel('Respiratory Amplitude (a.u.)');
+    if prospectiveGating
+        plot(gatingTrackFull.time/1000,gatingTrackFull.resp,'Color',[0.6, 0.6, 0.6]);
+        legend('Respiratory Gating - Acquired Data','Respiratory Monitor (Full Waveform)');
+    else 
+        legend('Respiratory Gating');
+    end 
+
+    % PG Subfigure
+    maxRR = ones(length(expandedTime/1000),1).*nanmax(gatingTrackFull.clean);
+    meanRR = ones(length(expandedTime/1000),1).*nanmean(gatingTrackFull.clean);
+    minRR = ones(length(expandedTime/1000),1).*nanmin(gatingTrackFull.clean);
+
+    subplot(2,1,2); hold on; title('ECG/PG Triggers (BPM)')
+    plot(expandedTime/1000,maxRR,'--','Color','black');
+    plot(expandedTime/1000,meanRR,'--','Color','black','HandleVisibility','off');
+    plot(expandedTime/1000,minRR,'--','Color','black','HandleVisibility','off');
+    scatter(gatingTrackFull.time/1000,gatingTrackFull.rr,35,'blue');
+    scatter(gatingTrackFull.time/1000,gatingTrackFull.missed,35,'filled','red');
+    scatter(gatingTrackFull.time/1000,gatingTrackFull.early,35,'filled','yellow');
+    xlabel('Time (s)'); ylabel('RR Interval (ms)');
+    legend('Max/Min/Mean RR','ECG/PG RR-intervals','Likely Missed HBs','Likely Early Triggers');
+    savefig('gatingTrack_resp_ecg_waveforms');
+
+    % Histogram (BPM)
+    figure; histogram(rrFull);
+    xlabel('RR-interval (ms)'); ylabel('Frequency (counts)'); title('Histogram of RR intervals');
+    savefig('gatingTrack_histogram');
+    
+    outputResults(gatingTrackFull,gatingDir,filesLoaded,...
+    numEarlyFull,numMissedFull,reconRR,reconBPM,reconWithinRR)
+end 
+
         
 %% Plotting (ecg track)
 if contains(filesLoaded,'ecg_track') % if we loaded in an ecg_track file ..
@@ -467,149 +519,8 @@ if contains(filesLoaded,'ecg_track') % if we loaded in an ecg_track file ..
     xlabel('RR-interval (ms)'); ylabel('Frequency (counts)'); title('Histogram of RR intervals');
     savefig('ecgTrack_histogram');
     
-    %%%%% Command Line Output %%%%%
-    fprintf('ECG/PG Gating Information and Statistics:\n')
-    fprintf('\n');
-    fprintf('    Time: \t \t \t \t %s\n',datetime('now'));
-    fprintf('    Directory: \t \t \t %s\n',gatingDir);
-    for i=1:length(filesLoaded)
-        fprintf('    Files Loaded: \t \t %s\n',filesLoaded{i});
-    end 
-    fprintf('\n');
-    if length(expandedTime)>length(ecgTrack.time)
-        fprintf('    Gating Type: \t \t \t \t \t \t Prospective Gating\n');
-        fprintf('    Percent Data Acquired: \t \t \t \t %7.2f %%\n', 100*length(ecgTrack.time)/length(expandedTime));    
-    else
-        fprintf('    Gating Type: \t \t \t \t \t Retrospective Gating\n');
-    end 
-    fprintf('    ECG time resolution: \t \t %7.2f ms.\n',ecgTrack.timeres);
-    fprintf('    Duration: \t \t \t \t \t \t \t %7.2f s.\n',ecgTrack.time(end)/1000);
-    fprintf('\n');
-    fprintf('    Mean RR interval: \t \t \t \t \t %7.2f ms.\n',nanmean(ecgTrack.clean));
-    fprintf('    Median RR interval: \t \t \t \t %7.2f ms.\n',nanmedian(ecgTrack.clean));
-    fprintf('    Standard deviation: \t \t \t \t %7.2f ms.\n',nanstd(ecgTrack.clean));
-    fprintf('    Range: \t \t \t \t \t \t \t \t %7.2f ms.\n',range(ecgTrack.clean));
-    fprintf('\n');
-    fprintf('    Mean heart rate: \t \t \t \t \t %7.2f bpm.\n',nanmean(ecgTrack.bpm));
-    fprintf('    Median heart rate: \t \t \t \t \t %7.2f bpm.\n',nanmedian(ecgTrack.bpm));
-    fprintf('    Standard deviation: \t \t \t \t %7.2f bpm.\n',nanstd(ecgTrack.bpm));
-    fprintf('    Range: \t \t \t \t \t \t \t \t %7.2f bpm.\n',range(ecgTrack.bpm));
-    fprintf('    Estimated # missed heartbeats: \t \t \t \t %d beats (%2.2f%%).\n',numMissedECG,100*(numMissedECG/length(peaksECG)));
-    fprintf('    Estimated # early triggers: \t \t \t \t %d beats (%2.2f%%).\n\n',numEarlyECG,100*(numEarlyECG/length(peaksECG))); 
+    outputResults(ecgTrack); 
 end 
-
-
-
-%% Plotting (with full gating track)
-if sum(contains(filesLoaded,'pcvipr_track'))==2 % if we have both ".pcvipr_track" and ".pcvipr_track.full" files..
-    if mod(length(gatingTrackFull.acq),length(gatingTrack.acq))==0 % if gatingTrackFull.acq is a multiple of the gatingTrack.acq
-        prospectiveGating = 0; % set prospective gating flag to false
-    else
-        prospectiveGating = 1; % set flag to true
-    end
-
-    dt = diff(gatingTrack.time);
-    timeres = mode(dt);
-    timeresFull = mode(diff(gatingTrackFull.time));
-    iterator = round(gatingTrack.time/timeres);
-    respOn = nan(iterator(end),1);
-    gateOn = nan(iterator(end),1);
-    expandedTime = gatingTrackFull.time(encodeLength:encodeLength:end);
-
-    for i=1:length(iterator)
-        respOn(iterator(i)) = gatingTrack.resp(i);
-        gateOn(iterator(i)) = gatingTrack.rr(i);
-    end 
-
-    gatingTrack.timeres = timeres;
-    gatingTrackFull.timeres = timeresFull;
-    gatingTrack.respOn = respOn;
-    gatingTrack.gateOn = gateOn;
-
-    if ~(length(respOn)==length(expandedTime)) % if the expanded vectors are not equal to the expanded time vectors..
-        disp('Acquisition error. The pcvipr_track file shows that data was not being acquired consistently. Script may crash.');
-        return % this happens if there are errors with scan acquisition
-    end 
-
-
-    % Respiratory Subfigure
-    figure; hFig = figure(1); set(hFig, 'Position', [50 50 1800 800]);
-    sgtitle('Gating Track and Full Gating Track Information'); 
-    subplot(2,1,1); hold on; title('Respiratory Waveforms');
-    plot(expandedTime/1000,respOn,'Color',[0, 0.5, 0.19],'LineWidth',2); 
-    xlabel('Time (s)'); ylabel('Respiratory Amplitude (a.u.)');
-    if prospectiveGating
-        plot(gatingTrackFull.time/1000,gatingTrackFull.resp,'Color',[0.6, 0.6, 0.6]);
-        legend('Respiratory Gating - Acquired Data','Respiratory Monitor (Full Waveform)');
-    else 
-        legend('Respiratory Gating');
-    end 
-
-    % PG Subfigure
-    maxRR = ones(length(expandedTime/1000),1).*nanmax(gatingTrackFull.clean);
-    meanRR = ones(length(expandedTime/1000),1).*nanmean(gatingTrackFull.clean);
-    minRR = ones(length(expandedTime/1000),1).*nanmin(gatingTrackFull.clean);
-
-    subplot(2,1,2); hold on; title('ECG/PG Triggers (BPM)')
-    plot(expandedTime/1000,maxRR,'--','Color','black');
-    plot(expandedTime/1000,meanRR,'--','Color','black','HandleVisibility','off');
-    plot(expandedTime/1000,minRR,'--','Color','black','HandleVisibility','off');
-    scatter(gatingTrackFull.time/1000,gatingTrackFull.rr,35,'blue');
-    scatter(gatingTrackFull.time/1000,gatingTrackFull.missed,35,'filled','red');
-    scatter(gatingTrackFull.time/1000,gatingTrackFull.early,35,'filled','yellow');
-    xlabel('Time (s)'); ylabel('RR Interval (ms)');
-    legend('Max/Min/Mean RR','ECG/PG RR-intervals','Likely Missed HBs','Likely Early Triggers');
-    savefig('gatingTrack_resp_ecg_waveforms');
-
-    % Histogram (BPM)
-    figure; histogram(rrFull);
-    xlabel('RR-interval (ms)'); ylabel('Frequency (counts)'); title('Histogram of RR intervals');
-    savefig('gatingTrack_histogram');
-
-    %%%%% Command Line Output %%%%%
-    fprintf('ECG/PG Gating Information and Statistics:\n')
-    fprintf('\n');
-    fprintf('    Time: \t \t \t \t %s\n',datetime('now'));
-    fprintf('    Directory: \t \t \t %s\n',gatingDir);
-    for i=1:length(filesLoaded)
-        fprintf('    Files Loaded: \t \t %s\n',filesLoaded{i});
-    end 
-    fprintf('\n');
-    if length(expandedTime)>length(gatingTrack.time)
-        fprintf('    Gating Type: \t \t \t \t \t \t Prospective Gating\n');
-        fprintf('    Percent Data Acquired: \t \t \t \t %7.2f %%\n', 100*length(gatingTrack.time)/length(expandedTime));    
-    else
-        fprintf('    Gating Type: \t \t \t \t \t Retrospective Gating\n');
-    end 
-    fprintf('    ECG/Resp. time resolution (TR): \t %7.2f ms.\n',gatingTrackFull.timeres);
-    fprintf('    Duration: \t \t \t \t \t \t \t %7.2f s.\n',gatingTrackFull.time(end)/1000);
-    fprintf('\n');
-    fprintf('    Mean RR interval: \t \t \t \t \t %7.2f ms.\n',nanmean(gatingTrackFull.clean));
-    fprintf('    Median RR interval: \t \t \t \t %7.2f ms.\n',nanmedian(gatingTrackFull.clean));
-    fprintf('    Standard deviation: \t \t \t \t %7.2f ms.\n',nanstd(gatingTrackFull.clean));
-    fprintf('    Range: \t \t \t \t \t \t \t \t %7.2f ms.\n',range(gatingTrackFull.clean));
-    fprintf('\n');
-    fprintf('    Mean heart rate: \t \t \t \t \t %7.2f bpm.\n',nanmean(gatingTrackFull.bpm));
-    fprintf('    Median heart rate: \t \t \t \t \t %7.2f bpm.\n',nanmedian(gatingTrackFull.bpm));
-    fprintf('    Standard deviation: \t \t \t \t %7.2f bpm.\n',nanstd(gatingTrackFull.bpm));
-    fprintf('    Range: \t \t \t \t \t \t \t \t %7.2f bpm.\n',range(gatingTrackFull.bpm));
-    fprintf('    Total Recorded heartbeats: \t \t \t \t %d beats.\n',length(peaksFull));
-    fprintf('    Estimated # missed heartbeats: \t \t \t \t %d beats (%2.2f%%).\n',numMissedFull,100*(numMissedFull/length(peaksFull)));
-    fprintf('    Estimated # early triggers: \t \t \t \t %d beats (%2.2f%%).\n\n',numEarlyFull,100*(numEarlyFull/length(peaksFull)));
-    
-    % Lets export the 
-    fprintf('!!ECG/PG Gating Statistics using ALL DATA:!!\n') 
-    fprintf('    All data Median RR: \t \t \t \t %7.2f ms.\n',nanmedian(gatingTrackFull.unclean));
-    fprintf('    All data expected heart rate: \t \t %7.2f bpm.\n',nanmedian(gatingTrackFull.uncleanbpm));
-    fprintf('    Values within expected RR: \t \t \t %7.2f %%.\n\n',nanmedian(gatingTrackFull.pct_within_rr));
-    
-    gating_stats = {'Median RR (ms)'; 'HR (bpm)';'Values within expected RR (%)'; 'Total Recorded heartbeats';'Estimated # missed heartbeats (%)';'Estimated # early triggers (%)'};
-    val = [nanmedian(gatingTrackFull.unclean); round(nanmedian(gatingTrackFull.uncleanbpm));round(nanmedian(gatingTrackFull.pct_within_rr)); length(peaksFull); round(100*(numMissedFull/length(peaksFull)),2);round(100*(numEarlyFull/length(peaksFull)),2)];
-    export_table = table(gating_stats,val)
-    writetable(export_table,'gating_stats.csv','Delimiter',',')
-end 
-
-
 
 %% Plotting (with complete waveforms)
 if sum(contains(filesLoaded,'PPG'))==2 % if we have 2 ppg waveform files
@@ -621,7 +532,8 @@ if sum(contains(filesLoaded,'PPG'))==2 % if we have 2 ppg waveform files
     legend('Raw PPG Waveform','Triggers');
     fprintf('\nRaw Waveform Signal:\n\n');
     SNRppg = snr(waveform.ppg); % get SNR measure from power spectrum analysis
-    if SNRppg>-8 % this is an arbitray threshold value, can be changed
+    SNRthresh = -8;
+    if SNRppg>SNRthresh % this is an arbitray threshold value, can be changed
         fprintf('   PPG: \t \t SIGNAL DETECTED\n');
     else
         fprintf('   PPG: \t \t LIKELY NOISE\n');
@@ -637,7 +549,8 @@ if sum(contains(filesLoaded,'RESP'))==2 % if we have 2 resp waveform files
     scatter(1:length(trigPoints),trigPoints,'filled','green');
     legend('Raw Respiratory Waveform','Bellow Triggers');
     SNRresp = snr(waveform.resp);
-    if SNRresp>-8 % this is an arbitray threshold value, can be changed
+    SNRthresh = -8;
+    if SNRresp>SNRthresh % this is an arbitray threshold value, can be changed
         fprintf('   RESP: \t \t SIGNAL DETECTED\n');
     else
         fprintf('   RESP: \t \t LIKELY NOISE\n');
@@ -659,19 +572,19 @@ if sum(contains(filesLoaded,'ECG'))==4 % if we have 4 ecg waveform files
     legend('ECG3','ECG3 Triggers'); hold off
     SNRecg2 = snr(waveform.ecg2);
     SNRecg3 = snr(waveform.ecg3);
-    if SNRecg2>-8 % this is an arbitray threshold value, can be changed
-        fprintf('   ECG2: \t \t SIGNAL DETECTED\n');
+    SNRthresh = -8;
+    if SNRecg2>SNRthresh % this is an arbitray threshold value, can be changed
+        fprintf('   ECG2: SIGNAL DETECTED\n');
     else
-        fprintf('   ECG2: \t \t LIKELY NOISE\n');
+        fprintf('   ECG2: LIKELY NOISE\n');
     end 
     if SNRecg3>-8 % this is an arbitray threshold value, can be changed
-        fprintf('   ECG3: \t \t SIGNAL DETECTED\n');
+        fprintf('   ECG3: SIGNAL DETECTED\n');
     else
-        fprintf('   ECG3: \t \t LIKELY NOISE\n');
+        fprintf('   ECG3: LIKELY NOISE\n');
     end
     savefig('Raw_ecg_waveforms_triggers.fig')
 end 
-
 
 
 %% Catch
@@ -681,12 +594,9 @@ if isempty(filesLoaded) % if we didn't find anything to load..
 end 
 if sum(contains(filesLoaded,'ECG2Data'))==1
     ecgData.prospectiveGating = prospectiveGating; % save prospectiveGating flag to compositive dataset
-    ecgData.encodeLength = encodeLength; % save encoding type to compositive dataset
     ecgData.filesLoaded = filesLoaded; % save all files loaded into compositive dataset
     save('ecgData.mat','ecgData'); % this file contains all loaded information
-    diary off % turn off diary, stop writing to ecgInformation.txt
 end
-
 
 
 %% Clear unnecessary variables
@@ -701,10 +611,53 @@ clear numMissed numMissedFull numEarly numEarlyFull missedHBidx
 clear expandedTime earlyTrigs earlyTrigIdx 
 clear missedHBs gateOn respOn filtDir fullDir
 clear SNRppg SNRecg2 SNRecg3 SNRresp badProspGating
-
-
+diary off % turn off diary, stop writing to ecgInformation.txt
 
 %% Ancillary functions
+function outputResults(datastruct,gatingDir,filesLoaded,...
+    numEarlyFull,numMissedFull,reconRR,reconBPM,reconWithinRR)
+
+    %%%%% Command Line Output %%%%%
+    fprintf('ECG/PG Gating Information and Statistics:\n')
+    fprintf('\n');
+    fprintf('    Time: %s\n',datetime('now'));
+    fprintf('    Directory: %s\n',gatingDir);
+    for i=1:length(filesLoaded)
+        fprintf('    Files Loaded: %s\n',filesLoaded{i});
+    end 
+    fprintf('\n');
+    fprintf('    ECG/Resp. time resolution (TR): %7.2f ms.\n',datastruct.timeres);
+    fprintf('    Duration: %7.2f s.\n',datastruct.time(end)/1000);
+    fprintf('\n');
+    fprintf('    Mean RR interval: %7.2f ms.\n',nanmean(datastruct.clean));
+    fprintf('    Median RR interval: %7.2f ms.\n',nanmedian(datastruct.clean));
+    fprintf('    Standard deviation: %7.2f ms.\n',nanstd(datastruct.clean));
+    fprintf('    Range: %7.2f ms.\n',range(datastruct.clean));
+    fprintf('\n');
+    fprintf('    Mean heart rate: %7.2f bpm.\n',nanmean(datastruct.bpm));
+    fprintf('    Median heart rate: %7.2f bpm.\n',nanmedian(datastruct.bpm));
+    fprintf('    Standard deviation: %7.2f bpm.\n',nanstd(datastruct.bpm));
+    fprintf('    Range: %7.2f bpm.\n',range(datastruct.bpm));
+    totalRR = sum(~isnan(datastruct.rr));
+    fprintf('    Total Recorded heartbeats: %d beats.\n',totalRR);
+    fprintf('    Estimated # missed heartbeats: %d beats (%2.2f%%).\n',numMissedFull,100*(numMissedFull/totalRR));
+    fprintf('    Estimated # early triggers: %d beats (%2.2f%%).\n\n',numEarlyFull,100*(numEarlyFull/totalRR));
+
+    % Lets export the pcvipr_reon output - should match recon.log
+    fprintf('!!ECG/PG Gating Statistics using ALL DATA:!!\n') 
+    fprintf('    All data Median RR: %7.2f ms.\n',reconRR);
+    fprintf('    All data expected heart rate: %7.2f bpm.\n',reconBPM);
+    fprintf('    Values within expected RR: %7.2f %%.\n\n',reconWithinRR);
+    
+    gating_stats = {'Median RR (ms)'; 'HR (bpm)'; 'Values within expected RR (%)'; ...
+        'Total Recorded heartbeats';'Estimated # missed heartbeats (%)';'Estimated # early triggers (%)'};
+    val = [reconRR; round(reconBPM); round(reconWithinRR); totalRR; ....
+        round(100*(numMissedFull/totalRR),2);round(100*(numEarlyFull/totalRR),2)];
+    export_table = table(gating_stats,val);
+    writetable(export_table,'gating_stats.csv','Delimiter',',')
+
+end 
+
 function [RRs,peaks] = getRR(ecg)
     df = diff(ecg); % differentiate ecg with respect to time
     dt = mode(df); % get time resolution of ecg by finding most common value in derivative

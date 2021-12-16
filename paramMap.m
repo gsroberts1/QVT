@@ -63,8 +63,8 @@ handles.output = hObject;
 
 % Update handles structure
 guidata(hObject, handles);
-movegui(handles.ParameterTool,'northeast'); %move to top left (WORK)
-%set(handles.ParameterTool,'Position',[276 32 190 48]); %HOME
+%movegui(handles.ParameterTool,'northeast'); %move to top left (WORK)
+set(handles.ParameterTool,'Position',[81 8 190 48]); %HOME
 set(handles.TextUpdate,'String','Load in a 4D Flow Dataset');
 
 
@@ -255,8 +255,8 @@ set(handles.AreaThreshSlide, 'Value',0);
 
 % Initialize visualization
 fig = figure(1); cla
-set(fig,'Position',[1921 41 1920 1083]); %WORK
-%set(fig,'Position',[2366 295 904 683]); %HOME
+%set(fig,'Position',[1921 41 1920 1083]); %WORK
+set(fig,'Position',[1367 12 1920 1003]); %HOME
 
 hpatch = patch(isosurface(permute(segment,[2 1 3]),0.5),'FaceAlpha',0); %bw iso angiogram
 reducepatch(hpatch,0.7);
