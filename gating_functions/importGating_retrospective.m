@@ -1,4 +1,4 @@
-%% This script reads and displays MRI gating track information.
+%% Reads/displays retrospectively gated PCVIPR gating track information.
 
 % Author: Grant Roberts
 % Date: September 18 2019
@@ -15,21 +15,21 @@
 
 %% Filter Gating Directory
 gatingDir = uigetdir(pwd, 'Select the directory with the gating tracks');
-cd(gatingDir) % move to this directory
+cd(gatingDir) %move to this directory
 
 fullDir = dir(); 
+fullDir(1:2) = [];
 keepFiles = ~(contains({fullDir.name},'.md5sum') | contains({fullDir.name},'.h5'))'; 
 filtDir = fullDir(keepFiles); %filter out md5sum and h5 files
 fileNames = {filtDir.name}'; %get filenames from filtered directory
 filesLoaded = {}; %initialize cell array to add loaded gating tracks
 ecgData.gatingDir = gatingDir; %add master dir to composite data structure
-diary ecgInformation.txt % start writing command window output to text file
+%diary ecgInformation.txt % start writing command window output to text file
 
 
 %% Gating Tracks
-badProspGating=0; %flag for bad prospectively-gated tracks
-idx = find(contains(fileNames,'pcvipr_track.full')); %find in fileNames
-if ~isempty(idx) %if we found a full gating track
+if sum(contains(fileNames,'pcvipr_track.full')) %if we found a full gating track
+    idx = find(contains(fileNames,'pcvipr_track.full'));
     name = fileNames{idx}; %grab name from fileNames
     fid = fopen(name);
     gate = fread(fid,'int32','b');
@@ -45,10 +45,10 @@ if ~isempty(idx) %if we found a full gating track
     gatingTrackFull.time = gatingTrackFull.time/10^scale;
     gatingTrackFull.prep = gate(:,4); % unsure what this is
     gatingTrackFull.acq = gate(:,5); % projection # tag for each encode
-
+    gatingTrackFull.rr = 2*median(gatingTrackFull.ecg);% use all data to get some statistics, this is the RR interval
+    
     % GATING STATS MATCHING RECON OUTPUT -- NEEDS ADJUSTMENT
-    reconRR = 2*median(gatingTrackFull.ecg);% use all data to get some statistics, this is the RR interval
-    within_rr = gatingTrackFull.ecg < reconRR;
+    within_rr = gatingTrackFull.ecg < gatingTrackFull.rr;
     ecg_filtered = gatingTrackFull.ecg(within_rr);
     sum_within = size(ecg_filtered,1);
     sum_total = size(gatingTrackFull.ecg,1);
@@ -78,11 +78,9 @@ if ~isempty(idx) %if we found a full gating track
     fileNames(idx) = []; %clear name from filName for next gating track
     filesLoaded = [filesLoaded, name]; %add file to loaded files running cell
     ecgData.gatingTrackFull = gatingTrackFull; %composite structure containing all information
-end
-
-%Load Gating Track - Shows only prospectively acquired gating data
-idx = find(contains(fileNames,'pcvipr_track')); %find in fileNames
-if ~isempty(idx)  
+elseif sum(contains(fileNames,'pcvipr_track'))
+    %Load Gating Track - Shows only prospectively acquired gating data
+    idx = find(contains(fileNames,'pcvipr_track')); %find in fileNames
     name = fileNames{idx};
     fid = fopen(name);
     gate = fread(fid,'int32','b');
@@ -146,7 +144,7 @@ if ~isempty(ecgIdx) % if we found something..
     infoIdx = find(contains(fileNames,'scan_info.txt')); % do we have the scan_info.txt file?
     if isempty(infoIdx) % if we found scan_info.txt ..
         fprintf('  \t A "scan_info.txt" file is required to load this ecg_track file\n');
-        exit
+        return;
     else 
         infoName = fileNames{infoIdx}; % grab name from fileNames
         fid = fopen(infoName);  % open scan_info.txt
@@ -232,7 +230,7 @@ if ~isempty(ecgIdx) % if we found something..
         end
 
         ecg_sorted = ecg(acquisition_order+1); %amplitude
-        TR=tr*4; % for 4point encode
+        TR = tr*4; % for 4point encode
         time = (TR:TR:TR*length(ecg_sorted))'; %time in ms
     end 
 
@@ -638,6 +636,7 @@ function outputResults(datastruct,gatingDir,filesLoaded,...
     fprintf('    Total Error: %2.2f%%.\n\n',100*((numEarlyFull+numMissedFull)/totalRR));
 
     % Lets export the pcvipr_reon output - should match recon.log
+    fprintf('PCVIPR RECON OUTPUT\n') 
     fprintf('!!ECG/PG Gating Statistics using ALL DATA:!!\n') 
     fprintf('    All data Median RR: %7.2f ms.\n',reconRR);
     fprintf('    All data expected heart rate: %7.2f bpm.\n',reconBPM);
@@ -649,8 +648,8 @@ function outputResults(datastruct,gatingDir,filesLoaded,...
         round(100*(numMissedFull/totalRR),2);round(100*(numEarlyFull/totalRR),2)];
     export_table = table(gating_stats,val);
     writetable(export_table,'gating_stats.csv','Delimiter',',')
-
 end 
+
 
 function [RRs,peaks] = getRR(ecg)
     df = diff(ecg); % differentiate ecg with respect to time
@@ -658,6 +657,7 @@ function [RRs,peaks] = getRR(ecg)
     peaks = find(df<-12*dt); % find negative peaks, 12*dt is an arbitray value
     RRs = ecg(peaks); % get the actual rr value at the peak
 end 
+
 
 function [missedHBidx,earlyTrigIdx] = findMissedHB(rr,peaks)
     % Find missed heartbeats
@@ -713,6 +713,7 @@ function [missedHBidx,earlyTrigIdx] = findMissedHB(rr,peaks)
         end 
     end 
 end 
+
 
 function B = bitreverse(N)
     N_bits = ceil(log2(N));
