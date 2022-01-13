@@ -60,7 +60,7 @@ if isGatingTrack
     gate = sortrows(gate,3); % organize time chronologically
     fclose(fid);
 
-    % Create gatingTrackFull struc (See ResearchGating.e from PCVIPR PSD) 
+    % Create gatingTrack struc (See ResearchGating.e from PCVIPR PSD) 
     gatingTrack.ecg = gate(:,1); %ecg (sawtooth) waveform
     gatingTrack.resp = 4095-gate(:,2); %resp waveform (12bit max)
     gatingTrack.time = (gate(:,3)-gate(1,3))/1e3; %time stamp (us/ms)
@@ -77,23 +77,28 @@ if isGatingTrack
     [rrFull,peaksFull] = getRR(gatingTrack.ecg); 
         gatingTrack.rr = nan(size(gate,1),1); %make array of NaNs
         gatingTrack.rr(peaksFull) = rrFull; %fill in NaNs with RRs
+        % account for discretization error (to better match recon rr est.)
+        mins = peaksFull+1;
+        discShift = round(mean(gatingTrack.ecg(mins)));
+        gatingTrack.rr = gatingTrack.rr + discShift;
         gatingTrack.bpm = 60000./gatingTrack.rr;
 
-    % Detect missed HBs and early triggers
-    numPoints = length(gatingTrack.ecg);
-    %Outliers
-    outliers = isoutlier(gatingTrack.rr,'movmedian',numPoints/10);
+    % Detect Missed HBs and Early Triggers
+    [missedHBIdx,earlyTrigIdx] = findMissedHB(rrFull,peaksFull);
+        missedHBs = nan(length(gatingTrack.rr),1); % expand vector to match gate lengths
+        earlyTrigs = nan(length(gatingTrack.rr),1); % expand vector to match gate lengths
+        missedHBs(missedHBIdx) = gatingTrack.rr(missedHBIdx); % fill in expanded vector with missed HBs
+        earlyTrigs(earlyTrigIdx) = gatingTrack.rr(earlyTrigIdx); % fill in expanded vector early triggers
+        gatingTrack.missed = missedHBs;
+        gatingTrack.early = earlyTrigs;
+        gatingTrack.clean = gatingTrack.rr;
+        gatingTrack.clean(missedHBIdx) = nan;
+        gatingTrack.clean(earlyTrigIdx) = nan; % data which has missed HB and early trigger events removed
+    
+    % Second Method to DetectOutliers
+    outliers = isoutlier(gatingTrack.rr);
     gatingTrack.outliers = nan(size(gate,1),1);
     gatingTrack.outliers(outliers) = gatingTrack.rr(outliers);
-    %Missed HB
-    missedHBs = gatingTrack.outliers>nanmean(gatingTrack.rr);
-    gatingTrack.missed = nan(size(gate,1),1);
-    gatingTrack.missed(missedHBs) = gatingTrack.rr(missedHBs);
-    %Early Triggers
-    earlyTrigs = gatingTrack.outliers<=nanmean(gatingTrack.rr);
-    gatingTrack.early = nan(size(gate,1),1);
-    gatingTrack.early(earlyTrigs) = gatingTrack.rr(earlyTrigs);
-    %Cleaned RR (without outliers)
     gatingTrack.clean = gatingTrack.rr;
     gatingTrack.clean(outliers) = nan; %remove missed HBs
 
@@ -117,33 +122,44 @@ if isGatingTrack
     legend('Respiratory Signal','Location','eastoutside');
 
     % PG/ECG Subfigure
-    maxRR = ones(numPoints,1).*nanmax(gatingTrack.clean); %get max clean RR interval
-    meanRR = ones(numPoints,1).*nanmean(gatingTrack.clean); %get mean RR
-    minRR = ones(numPoints,1).*nanmin(gatingTrack.clean); %get min RR
-    reconRR = ones(numPoints,1).*gatingTrack.recon_rr; %recon-calculated RR
+    avg = nanmean(gatingTrack.rr);
+    stdv = nanstd(gatingTrack.rr);
+    upperLim = ones(length(gatingTrack.ecg),1).*(avg + 2*stdv); %get max clean RR interval
+    meanRR = ones(length(gatingTrack.ecg),1).*avg; %get mean RR
+    lowerLim = ones(length(gatingTrack.ecg),1).*(avg - 2*stdv); %get min RR
+    reconRR = ones(length(gatingTrack.ecg),1).*gatingTrack.recon_rr; %recon-calculated RR
 
     subplot(2,1,2); hold on; 
-    title('ECG/PG Triggers (BPM)') %make second subplot
-    plot(time,maxRR,'--','Color','black'); %plot dashed line of max RR
-    plot(time,meanRR,'--','Color','black','HandleVisibility','off'); %plot dashed line of mean RR
-    plot(time,minRR,'--','Color','black','HandleVisibility','off'); %plot dashed line of min RR
-    plot(time,reconRR,'--','Color','cyan'); %plot recon RR
+    title('ECG/PG Triggers') %make second subplot
+    plot(time,upperLim,'--','Color','black'); %plot dashed line of max RR
+    plot(time,lowerLim,'--','Color','black','HandleVisibility','off'); %plot dashed line of min RR
+    plot(time,meanRR,'-','Color','black'); %plot dashed line of mean RR
+    plot(time,reconRR,'-','Color','cyan'); %plot recon RR
     scatter(time,gatingTrack.rr,35,'blue'); %scatter plot of rr intervals over time
+    scatter(time,gatingTrack.outliers,35,'filled','blue'); %scatter plot of rr intervals over time
     scatter(time,gatingTrack.missed,35,'filled','red'); %fill in points with red if missed HB
     scatter(time,gatingTrack.early,35,'filled','yellow'); %fill in points with yellow if early trig
     xlabel('Time (s)'); 
     ylabel('RR Interval (ms)');
-    legend('Max/Mean/Min','Recon RR','ECG/PG RR-intervals', ...
+    legend('2\sigma limits','Mean RR','Recon RR','ECG/PG RR-intervals','Outliers', ...
         'Likely Missed HBs','Likely Early Triggers','Location','eastoutside');
     savefig(hFig,'gatingTrack_resp_ecg_waveforms'); % save this figure
 
     % Histogram (BPM)
     histo = figure; 
-    histogram(60000./gatingTrack.rr); % plot histogram of heart rate (not clean)
+    %histo.WindowState = 'maximized'; %full-screen
+    subplot(2,1,1);     
+    histogram(gatingTrack.bpm); % plot histogram of heart rate (not clean)
     xlabel('BPM'); 
     ylabel('Frequency (counts)'); 
     title('Histogram of Heart Rates');
-    savefig(histo,'gatingTrack_histogram'); % save this figure
+
+    subplot(2,1,2); hold on;
+    boxplot(gatingTrack.bpm,'Orientation','horizontal','Notch','on', ...
+        'Widths',0.8,'OutlierSize',8,'Symbol','*r');
+    jitter = (1+(rand(size(gatingTrack.bpm))-0.5)/10);
+    scatter(gatingTrack.bpm,ones(size(gatingTrack.bpm)).*jitter,10,'+','k');
+    savefig(histo,'histogram_boxplot'); % save this figure
 
 %%%% Output/Save Results %%%%
     outputResults(gatingTrack,gatingDir,filesLoaded)
@@ -195,7 +211,7 @@ end
 idx = find(contains(fileNames,'ECG2Trig'));  % does this file exist in fileNames?
 if ~isempty(idx) % if we found something..
     name = fileNames{idx}; % grab name from fileNames
-    trigger.ecg2 = importdata(name); % put data into trigger structure
+    trigger.ecg2 = importdata(name)+1; % put data into trigger structure
     filesLoaded = [filesLoaded;name];
     ecgData.trigger.ecg2 = trigger.ecg2;
 end 
@@ -204,7 +220,7 @@ end
 idx = find(contains(fileNames,'ECG3Trig'));
 if ~isempty(idx)
     name = fileNames{idx};
-    trigger.ecg3 = importdata(name);
+    trigger.ecg3 = importdata(name)+1;
     filesLoaded = [filesLoaded;name];
     ecgData.trigger.ecg3 = trigger.ecg3;
 end 
@@ -213,7 +229,7 @@ end
 idx = find(contains(fileNames,'PPGTrig'));
 if ~isempty(idx)
     name = fileNames{idx};
-    trigger.ppg = importdata(name);
+    trigger.ppg = importdata(name)+1;
     filesLoaded = [filesLoaded;name];
     ecgData.trigger.ppg = trigger.ppg;
 end 
@@ -222,7 +238,7 @@ end
 idx = find(contains(fileNames,'RESPTrig'));
 if ~isempty(idx)
     name = fileNames{idx};
-    trigger.resp = importdata(name);
+    trigger.resp = importdata(name)+1;
     filesLoaded = [filesLoaded;name];
     ecgData.trigger.resp = trigger.resp;
 end 
@@ -236,7 +252,7 @@ if sum(contains(filesLoaded,'PPG'))==2 % if we have 2 ppg waveform files
     trigPoints(trigger.ppg) = waveform.ppg(trigger.ppg); % find where the trigger points occur in waveform.ppg
     scatter(1:length(trigPoints),trigPoints,'filled','green'); % plot points of triggers on ppg waveform
     legend('Raw PPG Waveform','Triggers');
-    fprintf('\nRaw Waveform Signal:\n\n');
+    fprintf('\nRaw Waveform Signal:\n');
     SNRppg = snr(waveform.ppg); % get SNR measure from power spectrum analysis
     SNRthresh = -8;
     if SNRppg>SNRthresh % this is an arbitray threshold value, can be changed
@@ -403,61 +419,75 @@ if ~isempty(ecgIdx) && ~dataLoaded %if we found something/haven't already loaded
     [rrECG, peaksECG] = getRR(ecgTrack.ecg); % get rr intervals from ecg data
         ecgTrack.rr = nan(length(ecgTrack.ecg),1); 
         ecgTrack.rr(peaksECG) = rrECG; % fill in NaNs with rr intervals
+        % account for discretization error (to better match recon rr est.)
+        mins = peaksECG+1;
+        discShift = round(mean(ecgTrack.ecg(mins)));
+        ecgTrack.rr = ecgTrack.rr + discShift;
         ecgTrack.bpm = 60000./ecgTrack.rr;
 
-    % Detect missed HBs and early triggers
-    numPoints = length(ecgTrack.ecg);
-    %Outliers
-    outliers = isoutlier(ecgTrack.rr,'movmedian',numPoints/10);
-    ecgTrack.outliers = nan(size(ecg_sorted));
-    ecgTrack.outliers(outliers) = ecgTrack.rr(outliers);
-    %Missed HB
-    missedHBs = ecgTrack.outliers>nanmean(ecgTrack.rr);
-    ecgTrack.missed = nan(size(ecg_sorted));
-    ecgTrack.missed(missedHBs) = ecgTrack.rr(missedHBs);
-    %Early Triggers
-    earlyTrigs = ecgTrack.outliers<=nanmean(ecgTrack.rr);
-    ecgTrack.early = nan(size(ecg_sorted));
-    ecgTrack.early(earlyTrigs) = ecgTrack.rr(earlyTrigs);
-    %Cleaned RR (without outliers)
-    ecgTrack.clean = ecgTrack.rr;
-    ecgTrack.clean(outliers) = nan; %remove missed HBs
-    filesLoaded = [filesLoaded;ecgName]; % add file to loaded files running cell
-    ecgData.ecgTrack = ecgTrack;
+    % Detect Missed HBs and Early Triggers
+    [missedHBIdx,earlyTrigIdx] = findMissedHB(rrFull,peaksFull);
+        missedHBs = nan(length(ecgTrack.rr),1); % expand vector to match gate lengths
+        earlyTrigs = nan(length(ecgTrack.rr),1); % expand vector to match gate lengths
+        missedHBs(missedHBIdx) = ecgTrack.rr(missedHBIdx); % fill in expanded vector with missed HBs
+        earlyTrigs(earlyTrigIdx) = ecgTrack.rr(earlyTrigIdx); % fill in expanded vector early triggers
+        ecgTrack.missed = missedHBs;
+        ecgTrack.early = earlyTrigs;
+        ecgTrack.clean = ecgTrack.rr;
+        ecgTrack.clean(missedHBIdx) = nan;
+        ecgTrack.clean(earlyTrigIdx) = nan; % data which has missed HB and early trigger events removed
+    
+    % Second Method to DetectOutliers
+    outliers = isoutlier(gatingTrack.rr);
+    gatingTrack.outliers = nan(size(gate,1),1);
+    gatingTrack.outliers(outliers) = gatingTrack.rr(outliers);
+    gatingTrack.clean = gatingTrack.rr;
+    gatingTrack.clean(outliers) = nan; %remove missed HBs
     
 %%%% Plotting and Output %%%%
     ecgTrack.timeres = mean(diff(ecgTrack.time)); %find time resolution by finding most common value
     time = ecgTrack.time/1000; %convert to seconds
     
     % PG/ECG Subfigure
-    maxRR = ones(numPoints,1).*nanmax(ecgTrack.clean); %get max clean RR interval
-    meanRR = ones(numPoints,1).*nanmean(ecgTrack.clean); %get mean RR
-    minRR = ones(numPoints,1).*nanmin(ecgTrack.clean); %get min RR
-    reconRR = ones(numPoints,1).*ecgTrack.recon_rr; %recon-calculated RR
+    avg = nanmean(ecgTrack.rr);
+    stdv = nanstd(ecgTrack.rr);
+    upperLim = ones(length(gatingTrack.ecg),1).*(avg + 2*stdv); %get max clean RR interval
+    meanRR = ones(length(gatingTrack.ecg),1).*avg; %get mean RR
+    lowerLim = ones(length(gatingTrack.ecg),1).*(avg - 2*stdv); %get min RR
+    reconRR = ones(length(gatingTrack.ecg),1).*ecgTrack.recon_rr; %recon-calculated RR
 
     hFig = figure; hold on; 
     hFig.WindowState = 'maximized'; %full-screen
-    title('ECG/PG Triggers (BPM)') %make second subplot
-    plot(time,maxRR,'--','Color','black'); %plot dashed line of max RR
-    plot(time,meanRR,'--','Color','black','HandleVisibility','off'); %plot dashed line of mean RR
-    plot(time,minRR,'--','Color','black','HandleVisibility','off'); %plot dashed line of min RR
+    title('ECG/PG Triggers') %make second subplot
+    plot(time,upperLim,'--','Color','black'); %plot dashed line of max RR
+    plot(time,lowerLim,'--','Color','black','HandleVisibility','off'); %plot dashed line of min RR
+    plot(time,meanRR,'--','Color','blue'); %plot dashed line of mean RR
     plot(time,reconRR,'--','Color','cyan'); %plot recon RR
     scatter(time,ecgTrack.rr,35,'blue'); %scatter plot of rr intervals over time
+    scatter(time,ecgTrack.outliers,35,'filled','blue'); %scatter plot of rr intervals over time
     scatter(time,ecgTrack.missed,35,'filled','red'); %fill in points with red if missed HB
     scatter(time,ecgTrack.early,35,'filled','yellow'); %fill in points with yellow if early trig
     xlabel('Time (s)'); 
     ylabel('RR Interval (ms)');
-    legend('Max/Mean/Min','Recon RR','ECG/PG RR-intervals', ...
+    legend('2\sigma limits','Mean RR','Recon RR','ECG/PG RR-intervals','Outliers',...
         'Likely Missed HBs','Likely Early Triggers','Location','eastoutside');
     savefig(hFig,'ecgTrack_ecg_waveforms'); % save this figure
 
     % Histogram (BPM)
     histo = figure; 
-    histogram(60000./ecgTrack.rr); % plot histogram of heart rate (not clean)
+    %histo.WindowState = 'maximized'; %full-screen
+    subplot(2,1,1);     
+    histogram(ecgTrack.bpm); % plot histogram of heart rate (not clean)
     xlabel('BPM'); 
     ylabel('Frequency (counts)'); 
     title('Histogram of Heart Rates');
-    savefig(histo,'ecgTrack_histogram'); % save this figure
+
+    subplot(2,1,2); hold on;
+    boxplot(ecgTrack.bpm,'Orientation','horizontal','Notch','on', ...
+        'Widths',0.8,'OutlierSize',8,'Symbol','*r');
+    jitter = (1+(rand(size(ecgTrack.bpm))-0.5)/10);
+    scatter(ecgTrack.bpm,ones(size(ecgTrack.bpm)).*jitter,10,'+','k');
+    savefig(histo,'histogram_boxplot'); % save this figure
 
 %%%% Output/Save Results %%%%
     outputResults(ecgTrack,gatingDir,filesLoaded)
@@ -479,8 +509,9 @@ clear ans acquisition_order count dataLoaded earlyTrigs ecg ecg_sorted
 clear ecgIdx ecgName ecgTrack fid fil* frame_order fullDir gatingDir
 clear idx info* is* inter* keepFiles looking maxRR meanRR minRR missedHBs
 clear need* nproj numPoints outliers param* peaksECG pos PR_ORDER reconRR
-clear rrECG sub* time tline tr TR within
+clear rrECG sub* time tline tr TR within discShift mins avg stdv
 clear gat* loadFullTrack name peaksFull rrFull SNR* trig* waveform
+clear earlyTrigIdx missedHBIdx lowerLim upperLim jitter
 
 diary off % turn off diary, stop writing to ecgInformation.txt
 
@@ -521,7 +552,7 @@ function outputResults(datastruct,gatingDir,filesLoaded)
     fprintf('    Mean heart rate: %7.2f bpm.\n',nanmean(datastruct.bpm));
     fprintf('    Median heart rate: %7.2f bpm.\n',nanmedian(datastruct.bpm));
     fprintf('    Standard deviation: %7.2f bpm.\n',nanstd(datastruct.bpm));
-    fprintf('    Coefficient variation: %7.2f %%.\n',(nanstd(datastruct.bpm)/nanmean(datastruct.bpm))*100);
+    fprintf('    Coefficient variation: %7.2f%%.\n\n',(nanstd(datastruct.bpm)/nanmean(datastruct.bpm))*100);
     A4 = {'';'Heart Rate Statistics';'Mean heart rate (bpm)';'Median heart rate (bpm)'; ...
         'Standard deviation (bpm)';'Coefficient variation'};
     B4 = {'';'';nanmean(datastruct.bpm);nanmedian(datastruct.bpm); ...
@@ -550,28 +581,27 @@ function outputResults(datastruct,gatingDir,filesLoaded)
     sum_total = size(datastruct.ecg,1);
     lowBPM = datastruct.recon_rr > 2000;
     highBPM = datastruct.recon_rr < 500;
-    fprintf('PCVIPR RECON OUTPUT (may not match perfectly due to TR rounding)\n') 
+    fprintf('PCVIPR Recon Output (may not match perfectly due to TR rounding)\n') 
     fprintf('    Median RR is %d ms.\n',datastruct.recon_rr);
     fprintf('    Expected heart rate is %7.4f bpm.\n',60000/datastruct.recon_rr);
     fprintf('    Values within expected RR = %7.4f %%.\n\n',100*(sum_within/sum_total));
 
-    A6 = {'';'PCVIPR RECON OUTPUT (may not match exactly due to TR rounding)'; ...
+    A6 = {'';'PCVIPR Recon Output (may not match exactly due to TR rounding)'; ...
         'Median RR (ms)'; 'Expected heart rate (bpm)'; 'Values within expected RR (%)'};
     B6 = {'';'';datastruct.recon_rr;60000/datastruct.recon_rr; ...
         100*(sum_within/sum_total)};
     
-    lm = fitlm(datastruct.time/1000,datastruct.rr);
+    lm = fitlm(datastruct.time/60000,datastruct.bpm);
     coefs = lm.Coefficients(2,:);
-    
-    fprintf('REGRESSION AND WARNINGS\n');
-    fprintf('    RR linear fit slope (RR/time) = %4.4f\n',coefs.Estimate(1));
+    fprintf('Regression and Warnings\n');
+    fprintf('    RR linear fit slope (BPM/min) = %4.4f\n',coefs.Estimate(1));
     fprintf('    p-value = %0.5f\n',coefs.pValue(1));
     if lowBPM
         fprintf('WARNING -- MEDIAN RR > 2000 (HR < 30 BPM)\n');
     elseif highBPM
         fprintf('WARNING -- MEDIAN RR < 500 (HR > 120 BPM)\n');
     end 
-    A7 = {''; 'RR linear fit slope (RR/time)'; 'p-value'; ...
+    A7 = {''; 'RR linear fit slope (BPM/time)'; 'p-value'; ...
         'HR < 30 bpm?'; 'HR > 120 bpm?'};
     B7 = {''; coefs.Estimate(1); coefs.pValue(1); lowBPM; highBPM};
     %%%%% Excel Saving %%%%%
@@ -605,6 +635,60 @@ function [RRs,peaks] = getRR(ecg)
     %for i=1:length(peaks)
     %    RRs(i)=time(peaks(i))-time(starts(i));
     %end  
+end 
+
+
+function [missedHBidx,earlyTrigIdx] = findMissedHB(rr,peaks)
+    % Find missed heartbeats
+    missedHBidx = []; % create missed hearbeat array
+    earlyTrigIdx = []; % create early trigger array
+    if length(rr)>100 % if we have more than 100 rr intervals
+        for L = 1:length(rr)
+            if L<25 % starting on the left side
+                RR_window = linspace(1,50,50)'; % create sliding window over first 50 points
+            elseif L>length(rr)-26 % in the middle, move the sliding window
+                RR_window = linspace(length(rr)-50,length(rr)-1,50)'; % create sliding window of width 50
+            else % if we're at the end of the rr vector
+                RR_window = linspace(L-24,L+25,50)'; % create sliding window over last 50 points
+            end
+            sliding_RR = median(rr(RR_window)); % grab median rr from sliding window
+            scale = rr(L)/sliding_RR; % find how the current rr interval compares to the median
+            if scale > 1.5 % if scale is greater than 1.66 times the median rr, it is likely a missed heartbeat. 1.66 is arbitrary
+                missedHBidx = [missedHBidx,peaks(L)]; % find index in the peak array and place in running array
+            end 
+            if scale <0.50 % if scale is less than 0.66 times the median rr, it is likely an early trigger. 0.66 is arbitrary
+                earlyTrigIdx = [earlyTrigIdx,peaks(L)]; % find index in the peak array and place in running array
+            end 
+        end
+    elseif length(rr)>40 % if we have less than 100 rr intervals but more than 40
+        for L = 1:length(rr)
+            if L<10
+                RR_window = linspace(1,20,20)';
+            elseif L>length(rr)-11
+                RR_window = linspace(length(rr)-20,length(rr)-1,20)';
+            else
+                RR_window = linspace(L-9,L+10,20)';
+            end
+            sliding_RR = median(rr(RR_window));
+            scale = rr(L)/sliding_RR;
+            if scale > 1.5
+                missedHBidx = [missedHBidx,peaks(L)];
+            end 
+            if scale <0.5
+                earlyTrigIdx = [earlyTrigIdx,peaks(L)];
+            end 
+        end
+    else % if we have a very small sample size (unreliable)
+        for L = 1:length(rr)
+            scale = rr(L)/median(rr);
+            if scale > 1.5
+                missedHBidx = [missedHBidx,peaks(L)];
+            end 
+            if scale <0.5
+                earlyTrigIdx = [earlyTrigIdx,peaks(L)];
+            end 
+        end 
+    end 
 end 
 
 
