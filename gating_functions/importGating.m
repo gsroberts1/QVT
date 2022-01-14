@@ -36,8 +36,8 @@ diary ecgInformation.txt % start writing command window output to text file
 %%%% Load Gating Data %%%%%
 if sum(contains(fileNames,'pcvipr_track'))>1
     isGatingTrack = 1;
-    loadFullTrack = 0; %if both tracks present, use regular (as done in recon)
-    idx = find(contains(fileNames,'pcvipr_track') & ~contains(fileNames,'pcvipr_track.full'));
+    loadFullTrack = 1; %if both tracks present, use full (not done in recon)
+    idx = find(contains(fileNames,'pcvipr_track.full'));
 elseif sum(contains(fileNames,'pcvipr_track.full'))
     isGatingTrack = 1;
     loadFullTrack = 1; %if we only find full track
@@ -426,7 +426,7 @@ if ~isempty(ecgIdx) && ~dataLoaded %if we found something/haven't already loaded
         ecgTrack.bpm = 60000./ecgTrack.rr;
 
     % Detect Missed HBs and Early Triggers
-    [missedHBIdx,earlyTrigIdx] = findMissedHB(rrFull,peaksFull);
+    [missedHBIdx,earlyTrigIdx] = findMissedHB(rrECG,peaksECG);
         missedHBs = nan(length(ecgTrack.rr),1); % expand vector to match gate lengths
         earlyTrigs = nan(length(ecgTrack.rr),1); % expand vector to match gate lengths
         missedHBs(missedHBIdx) = ecgTrack.rr(missedHBIdx); % fill in expanded vector with missed HBs
@@ -560,6 +560,7 @@ function outputResults(datastruct,gatingDir,filesLoaded)
     
     numMissedFull = sum(~isnan(datastruct.missed));
     numEarlyFull = sum(~isnan(datastruct.early));
+    numOutliers = sum(~isnan(datastruct.outliers));
     totalRR = sum(~isnan(datastruct.rr));
     meanHR = nanmean(datastruct.bpm);
     upperHR = meanHR + 5;
@@ -570,10 +571,13 @@ function outputResults(datastruct,gatingDir,filesLoaded)
     fprintf('    Estimated missed heartbeats: %d beats (%2.2f%%).\n',numMissedFull,100*(numMissedFull/totalRR));
     fprintf('    Estimated early triggers: %d beats (%2.2f%%).\n',numEarlyFull,100*(numEarlyFull/totalRR));
     fprintf('    Total error: %2.2f%%.\n',100*((numEarlyFull+numMissedFull)/totalRR));
+    fprintf('    Total outliers: %2.2f%%.\n',100*(numOutliers/totalRR));
     fprintf('    Percent data within mean HR +/- 5 BPM: %2.2f%%.\n\n',100*(withinLims/totalRR));
     A5 = {'';'Error Estimation';'Total recorded heartbeats';'Estimated missed heartbeats'; ...
-        'Estimated early triggers';'Total error (%)';'Data within mean HR +/- 5 BPM (%)'};
-    B5 = {'';'';totalRR;numMissedFull;numEarlyFull;100*((numEarlyFull+numMissedFull)/totalRR);100*(withinLims/totalRR)};
+        'Estimated early triggers';'Total error (%)';'Total outliers (%)'; ...
+        'Data within mean HR +/- 5 BPM (%)'};
+    B5 = {'';'';totalRR;numMissedFull;numEarlyFull;100*((numEarlyFull+numMissedFull)/totalRR); ...
+        100*(numOutliers/totalRR); 100*(withinLims/totalRR)};
     
     within_rr = datastruct.ecg < datastruct.recon_rr;
     ecg_filtered = datastruct.ecg(within_rr);
