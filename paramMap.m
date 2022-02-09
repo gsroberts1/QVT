@@ -23,7 +23,7 @@ function varargout = paramMap(varargin)
 %
 % See also: GUIDE, GUIDATA, GUIHANDLES
 % Edit the above text to modify the response to help paramMap
-% Last Modified by GUIDE v2.5 20-Oct-2021 09:43:48
+% Last Modified by GUIDE v2.5 05-Feb-2022 08:20:40
 
 % Developed by Carson Hoffman, University of Wisconsin-Madison 2019
 %   Used by: NONE (START FILE)
@@ -518,12 +518,69 @@ contents = cellstr(get(hObject,'String'));
 PointLabel = contents{get(hObject,'Value')};
 
 
+% --- Executes on button press in manualSeg.
+function manualSeg_Callback(hObject, eventdata, handles)
+global dcm_obj branchList timeMIPcrossection segmentFull
+global AveAreaBranch LogPoints fullCData area_val flowPerHeartCycle_val
+global PI_val diam_val maxVel_val RI_val flowPulsatile_val vTimeFrameave
+global velMean_val bnumStdvFlow bnumMeanFlow StdvFromMean SavePath
+
+global caseFilePath
+
+
+info_struct = getCursorInfo(dcm_obj);
+ptList = [info_struct.Position];
+ptList = reshape(ptList,[3,numel(ptList)/3])';
+pindex = zeros(size(ptList,1),1);
+
+for n = 1:size(ptList,1)
+    xIdx = find(branchList(:,1) == ptList(n,1));
+    yIdx = find(branchList(xIdx,2) == ptList(n,2));
+    zIdx = find(branchList(xIdx(yIdx),3) == ptList(n,3));
+    pindex(n) = xIdx(yIdx(zIdx));
+end
+
+% Gives associated branch number if full branch point is wanted
+bnum = branchList(pindex,4);
+Logical_branch = branchList(:,4) ~= bnum;
+
+% OUTPUT +/- points use this
+index_range = pindex-2:pindex+2;
+
+%removes outliers and points from other branches
+index_range(index_range<1) = [];
+index_range(index_range>size(branchList,1)) = [];
+index_range(Logical_branch(index_range)) = [];
+
+imdim = sqrt(size(segmentFull,2));
+%reshape(Maskcross,imdim,imdim);
+for q = 1:length(index_range)
+    cdSlice = timeMIPcrossection(index_range(q),:);
+    CDcross = reshape(cdSlice,imdim,imdim)./max(cdSlice);
+    fh = figure; imshow(CDcross,[]);
+    fh.WindowState = 'maximized';
+
+    circle = drawcircle('FaceAlpha',0.15,'LineWidth',1); %create freehand ROI
+    center = round(circle.Center); %get center coordinates
+    radius = circle.Radius;
+    [X,Y] = ndgrid(1:imdim,1:imdim);
+    X = X-center(2); %shift coordinate grid
+    Y = Y-center(1);
+    roiMask = sqrt(X.^2 + Y.^2)<=radius; %anything outside radius is ignored
+    segmentFull(index_range(q),:) = newSeg;
+    
+    
+end 
+
+
+
+
+
 % --- Executes on button press in SavePoint.
 function SavePoint_Callback(hObject, eventdata, handles)
 global PointLabel nframes VENC timeres branchList timeMIPcrossection area_val
 global flowPerHeartCycle_val PI_val diam_val maxVel_val RI_val flowPulsatile_val
 global vTimeFrameave velMean_val dcm_obj fig segmentFull SavePath MAGcrossection
-
 global vesselsAnalyzed allNotes
 
 vesselsAnalyzed{end+1} = PointLabel;
@@ -1061,3 +1118,4 @@ function ParameterTool_CloseRequestFcn(hObject, eventdata, handles)
 
 % Hint: delete(hObject) closes the figure
 delete(hObject);
+
