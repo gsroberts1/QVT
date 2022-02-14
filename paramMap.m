@@ -520,12 +520,11 @@ PointLabel = contents{get(hObject,'Value')};
 
 % --- Executes on button press in manualSeg.
 function manualSeg_Callback(hObject, eventdata, handles)
-global dcm_obj branchList timeMIPcrossection segmentFull
-global AveAreaBranch LogPoints fullCData area_val flowPerHeartCycle_val
-global PI_val diam_val maxVel_val RI_val flowPulsatile_val vTimeFrameave
-global velMean_val bnumStdvFlow bnumMeanFlow StdvFromMean SavePath
-
-global caseFilePath
+global dcm_obj branchList timeMIPcrossection segmentFull SavePath caseFilePath
+global area_val flowPerHeartCycle_val maxVel_val r res nframes
+global flowPulsatile_val PI_val RI_val velMean_val 
+global VplanesAllx VplanesAlly VplanesAllz PointLabel
+% global bnumStdvFlow bnumMeanFlow StdvFromMean diam_val 
 
 
 info_struct = getCursorInfo(dcm_obj);
@@ -555,7 +554,8 @@ index_range(Logical_branch(index_range)) = [];
 imdim = sqrt(size(segmentFull,2));
 %reshape(Maskcross,imdim,imdim);
 for q = 1:length(index_range)
-    cdSlice = timeMIPcrossection(index_range(q),:);
+    INDEX = index_range(q);
+    cdSlice = timeMIPcrossection(INDEX,:);
     CDcross = reshape(cdSlice,imdim,imdim)./max(cdSlice);
     fh = figure; imshow(CDcross,[]);
     fh.WindowState = 'maximized';
@@ -567,14 +567,53 @@ for q = 1:length(index_range)
     X = X-center(2); %shift coordinate grid
     Y = Y-center(1);
     roiMask = sqrt(X.^2 + Y.^2)<=radius; %anything outside radius is ignored
-    segmentFull(index_range(q),:) = newSeg;
+    oldMask = reshape(segmentFull(INDEX,:),[81 81]);
+    InterpVals = 4; %choose the interpolation between points
+    dArea = (res/10)^2; %pixel size (cm^2)
+    area = sum(roiMask(:))*dArea*((2*r+1)/(2*r*InterpVals+1))^2;
+    for n=1:nframes
+        v1 = squeeze(VplanesAllx(INDEX,:,n));
+        v2 = squeeze(VplanesAlly(INDEX,:,n));
+        v3 = squeeze(VplanesAllz(INDEX,:,n));
+        v1 = reshape(v1,[(2*r)+1 (2*r)+1]);
+        v2 = reshape(v2,[(2*r)+1 (2*r)+1]);
+        v3 = reshape(v3,[(2*r)+1 (2*r)+1]);
+        v1 = imresize(v1,[imdim imdim]);
+        v2 = imresize(v2,[imdim imdim]);
+        v3 = imresize(v3,[imdim imdim]);
+
+        vTimeFrame = roiMask(:).*0.1.*(v1(:) + v2(:) + v3(:)); %masked velocity (cm/s)
+        vTimeFramerowMean = sum(vTimeFrame) ./ sum(vTimeFrame~=0); %mean vel
+        flowPulsatile_val(INDEX,n) = vTimeFramerowMean.*area; %TR flow (ml/s)
+        maxVelFrame(n) = max(vTimeFrame); %max vel. each frame (cm/s)
+        velPulsatile_val(n) = vTimeFramerowMean;%mean vel. each frame (cm/s) 
+    end 
+    maxVel_val(INDEX) = max(maxVelFrame); %max in-plane veloc. for all frames
+    flowPerHeartCycle_val(INDEX) = sum(flowPulsatile_val(INDEX,:),2)./(nframes); %TA flow (ml/s)
+    velMean_val(INDEX) = sum(velPulsatile_val)./(nframes); %TA in-plane velocities
+    segmentFull(INDEX,:) = roiMask(:);
+    area_val(INDEX,1) = area;
+
+    PI_val(INDEX) = abs( max(flowPulsatile_val(INDEX,:)) - min(flowPulsatile_val(INDEX,:)) )./mean(flowPulsatile_val(INDEX,:));
+    RI_val(INDEX) = abs( max(flowPulsatile_val(INDEX,:)) - min(flowPulsatile_val(INDEX,:)) )./max(flowPulsatile_val(INDEX,:));
     
-    
+    segName = regexprep(PointLabel, ' ', '_');
+    segName = [segName '_' num2str(INDEX)];
+    segFolder = [SavePath filesep 'manual_seg'];
+    if ~exist(segFolder)
+        mkdir(segFolder);
+    end 
+    segPath = fullfile(segFolder,[segName '.mat']);
+    save(segPath,'roiMask')
+    fseg = figure; montage({CDcross, oldMask, CDcross, roiMask})
+    imagePath = fullfile(segFolder,[segName '.png']);
+    saveas(fseg,imagePath);
+    close(fseg);
+    close(fh)
 end 
-
-
-
-
+SavePoint_Callback(hObject, eventdata, handles);
+parameter_choice_Callback(hObject, eventdata, handles);
+set(dcm_obj,'UpdateFcn',@myupdatefcn_all); %update dataCursor w/ cust. fcn
 
 % --- Executes on button press in SavePoint.
 function SavePoint_Callback(hObject, eventdata, handles)
