@@ -560,13 +560,10 @@ for q = 1:length(index_range)
     fh = figure; imshow(CDcross,[]);
     fh.WindowState = 'maximized';
 
-    circle = drawcircle('FaceAlpha',0.15,'LineWidth',1); %create freehand ROI
-    center = round(circle.Center); %get center coordinates
-    radius = circle.Radius;
-    [X,Y] = ndgrid(1:imdim,1:imdim);
-    X = X-center(2); %shift coordinate grid
-    Y = Y-center(1);
-    roiMask = sqrt(X.^2 + Y.^2)<=radius; %anything outside radius is ignored
+    %shape = drawcircle('FaceAlpha',0.15,'LineWidth',1); %create freehand ROI
+    shape = drawpolygon;
+    roiMask = createMask(shape);
+    
     oldMask = reshape(segmentFull(INDEX,:),[81 81]);
     InterpVals = 4; %choose the interpolation between points
     dArea = (res/10)^2; %pixel size (cm^2)
