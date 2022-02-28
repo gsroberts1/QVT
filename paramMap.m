@@ -255,7 +255,7 @@ set(handles.AreaThreshSlide, 'Value',0);
 
 % Initialize visualization
 fig = figure(1); cla
-set(fig,'Position',[2325 57 1508 1047]); %WORK
+%set(fig,'Position',[2325 57 1508 1047]); %WORK
 %set(fig,'Position',[1856 37 1416 954]); %HOME
 
 hpatch = patch(isosurface(permute(segment,[2 1 3]),0.5),'FaceAlpha',0); %bw iso angiogram
@@ -561,7 +561,7 @@ for q = 1:length(index_range)
     fh.WindowState = 'maximized';
 
     %shape = drawcircle('FaceAlpha',0.15,'LineWidth',1); %create freehand ROI
-    shape = drawpolygon;
+    shape = drawpolygon(fh.CurrentAxes);
     roiMask = createMask(shape);
     
     oldMask = reshape(segmentFull(INDEX,:),[81 81]);
