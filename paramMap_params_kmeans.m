@@ -276,7 +276,7 @@ for j = 1:nframes
             vz = vz - back(:,:,:,3);
         end 
         
-    else
+    elseif strcmp(filetype,'hdf5')
         set(handles.TextUpdate,'String',['Calculating Quantitative - Parameters Time Frame: ' num2str(j) '/' num2str(nframes)]);drawnow;
         xvel_label = append('/Data/',['ph_' num2str(j-1,'%03i') '_vd_1']);
         yvel_label = append('/Data/',['ph_' num2str(j-1,'%03i') '_vd_2']);
@@ -311,6 +311,27 @@ for j = 1:nframes
 %         vz = h5read(fullfile(directory,'Flow.h5'),'/VZ', ... 
 %             [IDXstart(1),IDXstart(2),IDXstart(3),j], ...
 %             [IDXend(1)-IDXstart(1)+1,IDXend(2)-IDXstart(2)+1,IDXend(3)-IDXstart(3)+1,1]);
+    else % for python .h5 export 
+        set(handles.TextUpdate,'String',['Calculating Quantitative (python H5 export) - Parameters Time Frame: ' num2str(j) '/' num2str(nframes)]);drawnow;
+        % use for flow python
+        % Load x,y,z components of velocity (cropped) - single frame
+         vx = h5read(fullfile(directory,'Flow.h5'),'/VX', ... 
+             [IDXstart(1),IDXstart(2),IDXstart(3),j], ...
+             [IDXend(1)-IDXstart(1)+1,IDXend(2)-IDXstart(2)+1,IDXend(3)-IDXstart(3)+1,1])*10; % Flow units are cm/s, convert to mm/s (*10)
+         vy = h5read(fullfile(directory,'Flow.h5'),'/VY', ... 
+             [IDXstart(1),IDXstart(2),IDXstart(3),j], ...
+             [IDXend(1)-IDXstart(1)+1,IDXend(2)-IDXstart(2)+1,IDXend(3)-IDXstart(3)+1,1])*10;
+         vz = h5read(fullfile(directory,'Flow.h5'),'/VZ', ... 
+             [IDXstart(1),IDXstart(2),IDXstart(3),j], ...
+             [IDXend(1)-IDXstart(1)+1,IDXend(2)-IDXstart(2)+1,IDXend(3)-IDXstart(3)+1,1])*10;
+
+        % Correct background phase (if autoBGPC_flag is off)
+        if ~BGPCdone
+            vx = vx - back(:,:,:,1); %subtract off background phase in x-dir
+            vy = vy - back(:,:,:,2);
+            vz = vz - back(:,:,:,3);
+        end     
+        
     end 
     
     % Interpolation of time-resolved velocities
