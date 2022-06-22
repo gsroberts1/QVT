@@ -103,17 +103,17 @@ SUMnumS(1:3) = 0; SUMnumS(end-2:end) = 0;
 SUMnumC(1:3) = 0; SUMnumC(end-2:end) = 0;
 
 % Normalize values (from 0-1)
-BIN = SUMnumC>0.25; % Find where projection crosses thresh value of 0.25 
+BIN = SUMnumC>0.20; % Find where projection crosses thresh value of 0.25 
 [~,IDXstart(1)] = max(BIN,[],1); %get first thresh crossing
 [~,IDXend(1)] = max(flipud(BIN),[],1); 
 IDXend(1) = matrix(1) - IDXend(1) + 1; %get last thresh crossing
 
-BIN = SUMnumS>0.25; % Find where projection crosses thresh value of 0.25 
+BIN = SUMnumS>0.20; % Find where projection crosses thresh value of 0.25 
 [~,IDXstart(2)] = max(BIN,[],1); %get first thresh crossing
 [~,IDXend(2)] = max(flipud(BIN),[],1); 
 IDXend(2) = matrix(2) - IDXend(2) + 1; %get last thresh crossing
 
-BIN = SUMnumA>0.25; % Find where projection crosses thresh value of 0.25 
+BIN = SUMnumA>0.20; % Find where projection crosses thresh value of 0.25 
 [~,IDXstart(3)] = max(BIN,[],1); %get first thresh crossing
 [~,IDXend(3)] = max(flipud(BIN),[],1); 
 IDXend(3) = matrix(3) - IDXend(3) + 1; %get last thresh crossing
@@ -133,6 +133,7 @@ end
 clear temp newDIM n formatSpec delimiter
 
 %% Manual Background Phase Correction (if necessary)
+back = zeros(size(vMean),'single');
 if ~BGPCdone
     set(handles.TextUpdate,'String','Phase Correction with Polynomial'); drawnow;
     
@@ -144,7 +145,6 @@ if ~BGPCdone
     [Y,X,Z] = meshgrid(yrange,xrange,zrange);
     
     % Get poly data and correct average velocity for x,y,z dimensions
-    back = zeros(size(vMean),'single');
     back(:,:,:,1) = single(evaluate_poly(X,Y,Z,poly_fitx));
     back(:,:,:,2) = single(evaluate_poly(X,Y,Z,poly_fity));
     back(:,:,:,3) = single(evaluate_poly(X,Y,Z,poly_fitz));

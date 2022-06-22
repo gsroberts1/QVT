@@ -145,6 +145,7 @@ for n = 1:3
 end
 
 %% Manual Background Phase Correction (if necessary)
+back = zeros(size(vMean),'single');
 if ~BGPCdone
     set(handles.TextUpdate,'String','Phase Correction with Polynomial'); drawnow;
     
@@ -156,7 +157,6 @@ if ~BGPCdone
     [Y,X,Z] = meshgrid(yrange,xrange,zrange);
     
     % Get poly data and correct average velocity for x,y,z dimensions
-    back = zeros(size(vMean),'single');
     back(:,:,:,1) = single(evaluate_poly(X,Y,Z,poly_fitx));
     back(:,:,:,2) = single(evaluate_poly(X,Y,Z,poly_fity));
     back(:,:,:,3) = single(evaluate_poly(X,Y,Z,poly_fitz));
