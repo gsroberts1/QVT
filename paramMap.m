@@ -176,9 +176,9 @@ else
         VplanesAllx,VplanesAlly,VplanesAllz,Planes,branchList,segment,r, ...
         timeMIPcrossection,segmentFull,vTimeFrameave,MAGcrossection, imageData, ...
         bnumMeanFlow,bnumStdvFlow,StdvFromMean] ...  
-         = loadHDF5_py(directory, handles);       
-        %= loadHDF5_py(directory, handles);    
-        %= loadpcvipr(directory,handles);    
+        = loadpcvipr(directory,handles); 
+        %= loadHDF5_py(directory, handles);       
+        %= loadHDF5_py(directory, handles);
     
     directory = uigetdir; %select saving dir 
     % Save all variables needed to run parametertool. This will be used
