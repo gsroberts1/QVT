@@ -1,12 +1,12 @@
-function [nframes,matrix,res,timeres,VENC,area_vol,diam_vol,flowPerHeartCycle_vol, ...
-    maxVel_vol,PI_vol,RI_vol,flowPulsatile_vol,velMean_val, ...
+function [nframes,matrix,res,timeres,VENC,area_val,diam_val,flowPerHeartCycle_val, ...
+    maxVel_val,PI_val,RI_val,flowPulsatile_val,velMean_val, ...
     VplanesAllx,VplanesAlly,VplanesAllz,Planes,branchList,segment,r, ...
-    timeMIPcrossection,segment1,vTimeFrameave,MAGcrossection, imageData, ...
+    timeMIPcrossection,segmentFull,vTimeFrameave,MAGcrossection, imageData, ...
     bnumMeanFlow,bnumStdvFlow,StdvFromMean] = loadHDF5(directory,handles)
 %LOADHDF5: loadhdf5 reads in PCVIPR data saved in h5
 %   Used by: paramMap.m
 %   Dependencies: background_phase_correction.m, evaluate_poly.m, calc_angio.m,
-%   feature_extraction.m, paramMap_params_new.m, makeITPlane.m, slidingThreshold.m
+%   feature_extraction.m, paramMap_params_new.m, slidingThreshold.m
 
 %% Read HDF5
 filetype = 'hdf5';
@@ -42,16 +42,17 @@ for i = 1:size(headerh5.Attributes,1)
 end
 
 %%%% SPATIAL RESOLUTION ASSUMED TO BE ISOTROPIC (PCVIPR)
+nframes = pcviprHeader.frames;
 timeres = pcviprHeader.timeres; %temporal resolution (ms)
 res = nonzeros(abs([pcviprHeader.ix,pcviprHeader.iy,pcviprHeader.iz])); %spatial res (mm)
+% matrix(1) = pcviprHeader.matrixx; %number of pixels in rows (ASSUMED ISOTROPIC)
+% matrix(2) = pcviprHeader.matrixy;
+% matrix(3) = pcviprHeader.matrixz;
+matrix(1) = 320;
+matrix(2) = 320;
+matrix(3) = 320;
 VENC = pcviprHeader.VENC;
-matrix(1) = pcviprHeader.matrixx; %number of pixels in rows (ASSUMED ISOTROPIC)
-matrix(2) = pcviprHeader.matrixy;
-matrix(3) = pcviprHeader.matrixz;
-nframes = pcviprHeader.frames;
-% Checks if automatic background phase correction was performed in recon
-BGPCdone = pcviprHeader.automatic_BGPC_flag;
-BGPCdone = 0; %assume automatic backg. phase corr. wasnt done in recon
+BGPCdone = pcviprHeader.automatic_BGPC_flag; %check if BGPC done in recon
 
 %% Auto crop images (from MAG data)
 % Done to save memory when loading in TR velocity data below.
@@ -122,21 +123,6 @@ timeMIP = calc_angio(MAG, vMean, VENC);
 % NOTE: timeMIP is an approximated complex difference image.
 % The result is nearly equivalent to loading 'CD.dat'.
 
-%%%% OPTION FOR ANGIOGRAM %%%%%
-% CD = CD(IDXstart(1):IDXend(1),IDXstart(2):IDXend(2),IDXstart(3):IDXend(3));
-% angio = max(MAG(:))./max(CD(:))*CD - MAG;
-% v = sqrt(vx.^2 + vy.^2 + vz.^2);
-% v = v(IDXstart(1):IDXend(1),IDXstart(2):IDXend(2),IDXstart(3):IDXend(3));
-% SDv = std(v,0,4);
-% threshed = adaptthresh(SDv);
-% SDvBW = imcomplement(imbinarize(threshed));
-% SE = strel('sphere',3);
-% SDvBW = imdilate(SDvBW,SE);
-% timeMIP = angio.*SDvBW;
-% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% timeMIP = timeMIP(IDXstart(1):IDXend(1),IDXstart(2):IDXend(2),IDXstart(3):IDXend(3));
-% clear vx vy vz v angio v SDv threshed SDvBW SE
-
 %% Find optimum global threshold 
 step = 0.001; %step size for sliding threshold
 UPthresh = 0.8; %max upper threshold when creating Sval curvature plot
@@ -153,14 +139,12 @@ clear curvatureSM denom num ddy dy ddx dx areaThresh fullWidth conn
 clear Sval iter maxThresh newDIM dataArray fid formatSpec delimiter
 clear SUMnumA SUMnumC SUMnumS SUMnum step ans dataHeader UPthresh shiftHM_flag
 
+% save raw (cropped) images to imageData structure (for Visual Tool)
 imageData.MAG = MAG;
 imageData.CD = timeMIP; 
 imageData.V = vMean;
 imageData.Segmented = segment;
 imageData.pcviprHeader = pcviprHeader;
-imageData.gating_rr = pcviprHeader.median_rr_interval_ms;
-imageData.gating_hr = pcviprHeader.expected_hr_bpm;
-imageData.gating_var = round(pcviprHeader.vals_within_expected_rr_pct);
 
 %% Feature Extraction
 % Get trim and create the centerline data
@@ -169,12 +153,20 @@ spurLength = 15; %minimum branch length (removes short spurs)
 [~,~,branchList,~] = feature_extraction(sortingCriteria,spurLength,vMean,segment,handles);
 
 % Flow parameter calculation, bulk of code is in paramMap_parameters.m
-[area_vol,diam_vol,flowPerHeartCycle_vol,maxVel_vol,PI_vol,RI_vol, ...
-    flowPulsatile_vol,velMean_val,VplanesAllx,VplanesAlly,VplanesAllz, ... 
-    r,timeMIPcrossection,segment1,vTimeFrameave,MAGcrossection, ...
-    bnumMeanFlow,bnumStdvFlow,StdvFromMean,Planes] ...
-    = paramMap_params_kmeans(filetype,branchList,matrix,timeMIP,vMean, ...
+%%% KMEANS %%%
+[area_val,diam_val,flowPerHeartCycle_val,maxVel_val,PI_val,RI_val,flowPulsatile_val,...
+    velMean_val,VplanesAllx,VplanesAlly,VplanesAllz,r,timeMIPcrossection,segmentFull,...
+    vTimeFrameave,MAGcrossection,bnumMeanFlow,bnumStdvFlow,StdvFromMean,Planes] ...
+    = paramMap_params_kmeans(filetype,branchList,matrix,timeMIP,vMean,back,...
     BGPCdone,directory,nframes,res,MAG,IDXstart,IDXend,handles);
+
+%%% SLIDING THRESHOLD %%%
+% [area_val,diam_val,flowPerHeartCycle_val,maxVel_val,PI_val,RI_val, ...
+% flowPulsatile_val,velMean_val,VplanesAllx,VplanesAlly,VplanesAllz, ...
+% r,timeMIPcrossection,segmentFull,vTimeFrameave,MAGcrossection, ...
+% bnumMeanFlow,bnumStdvFlow,StdvFromMean,Planes] ...
+%     = paramMap_params_new(filetype,branchList,matrix,timeMIP,vMean,...
+% back,BGPCdone,directory,nframes,res,MAG,IDXstart,IDXend,handles);
 
 set(handles.TextUpdate,'String','All Data Loaded'); drawnow;
 

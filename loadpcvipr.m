@@ -5,11 +5,9 @@ function [nframes,matrix,res,timeres,VENC,area_val,diam_val,flowPerHeartCycle_va
     bnumMeanFlow,bnumStdvFlow,StdvFromMean] = loadpcvipr(directory,handles)
 %LOADPCVIPR: loadpcvipr reads in header information and reconstructed data 
 %(velocity, vmean, etc.) and transforms data into usable matlab variables.
-%
 %   Used by: paramMap.m
 %   Dependencies: load_dat.m, background_phase_correction.m, evaluate_poly.m
-%     calc_angio.m, feature_extraction.m, paramMap_params_new.m, makeITPlane.m
-%     slidingThreshold.m
+%     calc_angio.m, feature_extraction.m, paramMap_params_new.m, slidingThreshold.m
 
 %% Reads PCVIPR Header
 filetype = 'dat';
@@ -34,55 +32,9 @@ matrix(1) = pcviprHeader.matrixx; %number of pixels in rows (ASSUMED ISOTROPIC)
 matrix(2) = pcviprHeader.matrixy;
 matrix(3) = pcviprHeader.matrixz;
 VENC = pcviprHeader.VENC;
+BGPCdone = pcviprHeader.automatic_BGPC_flag; %check if BGPC done in recon
 clear dataArray fid
 
-%% Reads Data Header
-% Checks if automatic background phase correction was performed in recon
-fid = fopen([directory filesep 'data_header.txt'], 'r');
-if fid>0
-    dataHeader = textscan(fid, formatSpec, 'Delimiter', delimiter, ...
-        'MultipleDelimsAsOne', true, 'ReturnOnError', false);
-    fclose(fid);
-    bgpcIdx = find(contains(dataHeader{1,1},'automatic_BGPC_flag'));
-    if isempty(bgpcIdx)
-        BGPCdone = 0;
-    else
-        BGPCdone = dataHeader{1,2}{bgpcIdx};
-        BGPCdone = str2double(BGPCdone);
-    end 
-else
-    BGPCdone = 0; %assume automatic backg. phase corr. wasnt done in recon
-end 
-
-
-%% Read Gating Track
-find_gating_file = dir('*pcvipr_track');
-if ~isempty(find_gating_file)
-    name = find_gating_file.name;
-    fid = fopen(name);
-    gate = fread(fid,'int32','b');
-    gate = reshape(gate,[numel(gate)/4 4]);
-    gate = sortrows(gate,3);
-    fclose(fid);
-
-    % Put data into gatingTrack structure
-    gatingTrack.ecg = gate(:,1);
-
-    gatingTrack.unclean = 2*median(gatingTrack.ecg);% this is the RR interval
-    within_rr = gatingTrack.ecg < gatingTrack.unclean;
-    ecg_filtered = gatingTrack.ecg(within_rr);
-    sum_within = size(ecg_filtered,1);
-    sum_total = size(gatingTrack.ecg,1);
-    gatingTrack.pct_within_rr = 100.0*sum_within / sum_total;  
-    gatingTrack.uncleanbpm = 60000./(gatingTrack.unclean);
-    gating_rr = nanmedian(gatingTrack.unclean);
-    gating_hr = round(nanmedian(gatingTrack.uncleanbpm));
-    gating_var = round(nanmedian(gatingTrack.pct_within_rr));
-else
-    gating_rr = "missing gating file";
-    gating_hr = "missing gating file";
-    gating_var = "missing gating file";
-end
     
 %% Read MAG Data    
 set(handles.TextUpdate,'String','Loading Time Averaged Data'); drawnow;
@@ -170,16 +122,17 @@ areaThresh = round(sum(segment(:)).*0.005); %minimum area to keep
 conn = 6; %connectivity (i.e. 6-pt)
 segment = bwareaopen(segment,areaThresh,conn); %inverse fill holes
 
+clear CDcrop x y SMf temp n halfMaxRightIndex halfMaxLeftIndex Idx BIN V
+clear curvatureSM denom num ddy dy ddx dx areaThresh fullWidth conn
+clear Sval iter maxThresh newDIM dataArray fid formatSpec delimiter
+clear SUMnumA SUMnumC SUMnumS SUMnum step ans dataHeader UPthresh shiftHM_flag
+
 % save raw (cropped) images to imageData structure (for Visual Tool)
 imageData.MAG = MAG;
 imageData.CD = timeMIP; 
 imageData.V = vMean;
 imageData.Segmented = segment;
 imageData.pcviprHeader = pcviprHeader;
-imageData.gating_rr = gating_rr;
-imageData.gating_hr = gating_hr;
-imageData.gating_var = gating_var;
-clear step UPthresh SMf shiftHM_flag medFilt_flag areaThresh conn ans
 
 
 %% Feature Extraction

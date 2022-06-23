@@ -25,7 +25,8 @@ function varargout = paramMap(varargin)
 % Edit the above text to modify the response to help paramMap
 % Last Modified by GUIDE v2.5 05-Feb-2022 08:20:40
 
-% Developed by Carson Hoffman, University of Wisconsin-Madison 2019
+% Developed by Carson Hoffman and Grant Roberts
+% University of Wisconsin-Madison 2019
 %   Used by: NONE (START FILE)
 %   Dependencies: loadpcvipr.m
 
@@ -169,14 +170,24 @@ if  fileIndx > 1  %if a pre-processed case is selected
     pause(1)
     set(handles.TextUpdate,'String','Please Select Analysis Plane Location'); drawnow;
 
-else
-    %Load in pcvipr data from scratch
-    [nframes,matrix,res,timeres,VENC,area_val,diam_val,flowPerHeartCycle_val, ...
+else %Load in pcvipr data from scratch
+    if exist([directory filesep 'Flow.h5'],'file')
+        [nframes,matrix,res,timeres,VENC,area_val,diam_val,flowPerHeartCycle_val, ...
         maxVel_val,PI_val,RI_val,flowPulsatile_val,velMean_val, ...
         VplanesAllx,VplanesAlly,VplanesAllz,Planes,branchList,segment,r, ...
         timeMIPcrossection,segmentFull,vTimeFrameave,MAGcrossection, imageData, ...
         bnumMeanFlow,bnumStdvFlow,StdvFromMean] ...
-        = loadpcvipr(directory,handles);
+        = loadHDF5(directory,handles);
+    elseif exist([directory filesep 'CD.dat'],'file')
+        [nframes,matrix,res,timeres,VENC,area_val,diam_val,flowPerHeartCycle_val, ...
+            maxVel_val,PI_val,RI_val,flowPulsatile_val,velMean_val, ...
+            VplanesAllx,VplanesAlly,VplanesAllz,Planes,branchList,segment,r, ...
+            timeMIPcrossection,segmentFull,vTimeFrameave,MAGcrossection, imageData, ...
+            bnumMeanFlow,bnumStdvFlow,StdvFromMean] ...
+            = loadpcvipr(directory,handles);
+    else
+        disp("CANNOT FIND APPROPRIATE PCVIPR DATA")
+    end 
     
     directory = uigetdir; %select saving dir 
     % Save all variables needed to run parametertool. This will be used
@@ -236,16 +247,6 @@ else
         'Mean Flow ml/s','Pulsatility Index','Branch Label'});
     xlwrite([SavePath filesep 'SummaryParamTool.xls'],col_header,'Summary_Centerline','A1');
     xlwrite([SavePath filesep 'SummaryParamTool.xls'],get(handles.NamePoint,'String'),'Summary_Centerline','A2');
-    
-    % export gating stats 
-    gating_stats = {'Median RR (ms)'; 'HR (bpm)';'Values within expected RR (%)'};
-    val = [imageData.gating_rr, imageData.gating_hr, imageData.gating_var]';
-    gating_table = table(gating_stats,val);
-    writetable(gating_table,[SavePath filesep 'gating_stats.csv'],'Delimiter',',');
-    
-    set(handles.TextUpdate,'String','Data Successfully Saved'); drawnow;
-    pause(0.5)
-    set(handles.TextUpdate,'String','Please Select Analysis Plane Location'); drawnow;
 end
 
 %%% Plotting 3D Interactive Display
