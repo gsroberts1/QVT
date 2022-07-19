@@ -178,7 +178,8 @@ else %Load in pcvipr data from scratch
         timeMIPcrossection,segmentFull,vTimeFrameave,MAGcrossection, imageData, ...
         bnumMeanFlow,bnumStdvFlow,StdvFromMean] ...  
         = loadpcvipr(directory,handles); 
-        %= loadHDF5_py(directory, handles);       
+        %= loadHDF5_py(directory, handles);   
+    end 
     
     directory = uigetdir; %select saving dir 
     % Save all variables needed to run parametertool. This will be used
