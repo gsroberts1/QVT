@@ -1,7 +1,7 @@
-function [nframes,matrix,res,timeres,VENC,area_vol,diam_vol,flowPerHeartCycle_vol, ...
-    maxVel_vol,PI_vol,RI_vol,flowPulsatile_vol,velMean_val, ...
+function [nframes,matrix,res,timeres,VENC,area_val,diam_val,flowPerHeartCycle_val, ...
+    maxVel_val,PI_val,RI_val,flowPulsatile_val,velMean_val, ...
     VplanesAllx,VplanesAlly,VplanesAllz,Planes,branchList,segment,r, ...
-    timeMIPcrossection,segment1,vTimeFrameave,MAGcrossection, imageData, ...
+    timeMIPcrossection,segmentFull,vTimeFrameave,MAGcrossection, imageData, ...
     bnumMeanFlow,bnumStdvFlow,StdvFromMean] = loadHDF5_py(directory,handles)
 %LOADHDF5: loadhdf5 reads in python-reconstructed PCVIPR data.
 %   Used by: paramMap.m
@@ -9,13 +9,13 @@ function [nframes,matrix,res,timeres,VENC,area_vol,diam_vol,flowPerHeartCycle_vo
 %   feature_extraction.m, paramMap_params_new.m, makeITPlane.m, slidingThreshold.m
 
 %% Read HDF5
-filetype = 'hdf5';
+filetype = 'hdf5_py';
 set(handles.TextUpdate,'String','Loading .HDF5 Data'); drawnow;
 %cd = h5read(fullfile(directory,'Flow.h5'),'/ANGIO');
 mag = h5read(fullfile(directory,'Flow.h5'),'/MAG');
-vx = h5read(fullfile(directory,'Flow.h5'),'/VX');
-vy = h5read(fullfile(directory,'Flow.h5'),'/VY');
-vz = h5read(fullfile(directory,'Flow.h5'),'/VZ');
+vx = h5read(fullfile(directory,'Flow.h5'),'/VX')*10; % units cm/s to mm/s
+vy = h5read(fullfile(directory,'Flow.h5'),'/VY')*10;
+vz = h5read(fullfile(directory,'Flow.h5'),'/VZ')*10;
 
 matrix(1) = size(mag,1);                 
 matrix(2) = size(mag,2);
@@ -25,33 +25,40 @@ nframes = size(mag,4);
 disp('Computing time-averaged data')
 %CD = mean(cd,4)*32000;
 MAG = mean(mag,4)*32000;
-V(:,:,:,1) = mean(vx,4)*10;
-V(:,:,:,2) = mean(vy,4)*10;
-V(:,:,:,3) = mean(vz,4)*10;
+V(:,:,:,1) = mean(vx,4); 
+V(:,:,:,2) = mean(vy,4);
+V(:,:,:,3) = mean(vz,4);
 
 clear mag vx vy vz
 
-%% Reads PCVIPR Header
-fid = fopen([directory filesep 'pcvipr_header.txt'], 'r');
-delimiter = ' ';
-formatSpec = '%s%s%[^\n\r]'; %read 2 strings(%s%s),end line(^\n),new row(r)
+%% Reads PCVIPR Header (need to generate accurate header for python code)
+%fid = fopen([directory filesep 'pcvipr_header.txt'], 'r');
+%delimiter = ' ';
+%formatSpec = '%s%s%[^\n\r]'; %read 2 strings(%s%s),end line(^\n),new row(r)
 % Info from headers are placed in dataArray, 1x2 cell array.
-dataArray = textscan(fid, formatSpec, 'Delimiter', delimiter, ...
-    'MultipleDelimsAsOne', true, 'ReturnOnError', false);
-fclose(fid);
+%dataArray = textscan(fid, formatSpec, 'Delimiter', delimiter, ...
+%    'MultipleDelimsAsOne', true, 'ReturnOnError', false);
+%fclose(fid);
 
 % Converts value column from strings to structure with nums.
-dataArray{1,2} = cellfun(@str2num,dataArray{1,2}(:), 'UniformOutput', false);
-pcviprHeader = cell2struct(dataArray{1,2}(:), dataArray{1,1}(:), 1);
-
+%dataArray{1,2} = cellfun(@str2num,dataArray{1,2}(:), 'UniformOutput', false);
+%pcviprHeader = cell2struct(dataArray{1,2}(:), dataArray{1,1}(:), 1);
+pcviprHeader.a = 1;
+pcviprHeader.b = {'This array is empty?'};
 %%%% SPATIAL RESOLUTION ASSUMED TO BE ISOTROPIC (PCVIPR)
-timeres = pcviprHeader.timeres; %temporal resolution (ms)
-res = nonzeros(abs([pcviprHeader.ix,pcviprHeader.iy,pcviprHeader.iz])); %spatial res (mm)
-VENC = pcviprHeader.VENC;
+%hard-coded for now
+
+%timeres = pcviprHeader.timeres; %temporal resolution (ms)
+%res = nonzeros(abs([pcviprHeader.ix,pcviprHeader.iy,pcviprHeader.iz])); %spatial res (mm)
+%VENC = pcviprHeader.VENC;
+timeres = 50; %50*20 = 1000ms
+res = 0.6875; %mm
+VENC= 800; %mm/s
 
 %% Reads Data Header
 % Checks if automatic background phase correction was performed in recon
 fid = fopen([directory filesep 'data_header.txt'], 'r');
+fid = 0 % dont read for now
 if fid>0
     dataHeader = textscan(fid, formatSpec, 'Delimiter', delimiter, ...
         'MultipleDelimsAsOne', true, 'ReturnOnError', false);
@@ -67,7 +74,35 @@ else
     BGPCdone = 0; %assume automatic backg. phase corr. wasnt done in recon
 end 
 
-  
+%% Read Gating Track
+find_gating_file = dir('*pcvipr_track');
+if ~isempty(find_gating_file)
+    name = find_gating_file.name;
+    fid = fopen(name);
+    gate = fread(fid,'int32','b');
+    gate = reshape(gate,[numel(gate)/4 4]);
+    gate = sortrows(gate,3);
+    fclose(fid);
+
+    % Put data into gatingTrack structure
+    gatingTrack.ecg = gate(:,1);
+
+    gatingTrack.unclean = 2*median(gatingTrack.ecg);% this is the RR interval
+    within_rr = gatingTrack.ecg < gatingTrack.unclean;
+    ecg_filtered = gatingTrack.ecg(within_rr);
+    sum_within = size(ecg_filtered,1);
+    sum_total = size(gatingTrack.ecg,1);
+    gatingTrack.pct_within_rr = 100.0*sum_within / sum_total;  
+    gatingTrack.uncleanbpm = 60000./(gatingTrack.unclean);
+    gating_rr = nanmedian(gatingTrack.unclean);
+    gating_hr = round(nanmedian(gatingTrack.uncleanbpm));
+    gating_var = round(nanmedian(gatingTrack.pct_within_rr));
+else
+    gating_rr = "missing gating file";
+    gating_hr = "missing gating file";
+    gating_var = "missing gating file";
+end 
+
 %% Auto crop images (from MAG data)
 % Done to save memory when loading in TR velocity data below.
 SUMnumA = squeeze(sum(sum(MAG,1),2)); %1D axial projection
@@ -173,6 +208,10 @@ imageData.CD = timeMIP;
 imageData.V = vMean;
 imageData.Segmented = segment;
 imageData.pcviprHeader = pcviprHeader;
+imageData.gating_rr = gating_rr;
+imageData.gating_hr = gating_hr;
+imageData.gating_var = gating_var;
+clear step UPthresh SMf shiftHM_flag medFilt_flag areaThresh conn ans
 
 %% Feature Extraction
 % Get trim and create the centerline data
@@ -181,12 +220,20 @@ spurLength = 15; %minimum branch length (removes short spurs)
 [~,~,branchList,~] = feature_extraction(sortingCriteria,spurLength,vMean,segment,handles);
 
 % Flow parameter calculation, bulk of code is in paramMap_parameters.m
-[area_vol,diam_vol,flowPerHeartCycle_vol,maxVel_vol,PI_vol,RI_vol, ...
-    flowPulsatile_vol,velMean_val,VplanesAllx,VplanesAlly,VplanesAllz, ... 
-    r,timeMIPcrossection,segment1,vTimeFrameave,MAGcrossection, ...
-    bnumMeanFlow,bnumStdvFlow,StdvFromMean,Planes] ...
-    = paramMap_params_kmeans(filetype,branchList,matrix,timeMIP,vMean, ...
+
+%kmeans
+[area_val,diam_val,flowPerHeartCycle_val,maxVel_val,PI_val,RI_val,flowPulsatile_val, ...
+    velMean_val,VplanesAllx,VplanesAlly,VplanesAllz,r,timeMIPcrossection,segmentFull,...
+    vTimeFrameave,MAGcrossection,bnumMeanFlow,bnumStdvFlow,StdvFromMean,Planes] ...
+    = paramMap_params_kmeans(filetype,branchList,matrix,timeMIP,vMean,back, ...
     BGPCdone,directory,nframes,res,MAG,IDXstart,IDXend,handles);
+
+%th based
+%[area_val,diam_val,flowPerHeartCycle_val,maxVel_val,PI_val,RI_val,flowPulsatile_val,...
+%    velMean_val,VplanesAllx,VplanesAlly,VplanesAllz,r,timeMIPcrossection,segmentFull,...
+%    vTimeFrameave,MAGcrossection,bnumMeanFlow,bnumStdvFlow,StdvFromMean,Planes] ...
+%    = paramMap_params_new(filetype,branchList,matrix,timeMIP,vMean,back,...
+%   BGPCdone,directory,nframes,res,MAG,IDXstart,IDXend,handles);
 
 set(handles.TextUpdate,'String','All Data Loaded'); drawnow;
 
