@@ -23,9 +23,10 @@ function varargout = paramMap(varargin)
 %
 % See also: GUIDE, GUIDATA, GUIHANDLES
 % Edit the above text to modify the response to help paramMap
-% Last Modified by GUIDE v2.5 20-Oct-2021 09:43:48
+% Last Modified by GUIDE v2.5 05-Feb-2022 08:20:40
 
-% Developed by Carson Hoffman, University of Wisconsin-Madison 2019
+% Developed by Carson Hoffman and Grant Roberts
+% University of Wisconsin-Madison 2019
 %   Used by: NONE (START FILE)
 %   Dependencies: loadpcvipr.m
 
@@ -169,16 +170,15 @@ if  fileIndx > 1  %if a pre-processed case is selected
     pause(1)
     set(handles.TextUpdate,'String','Please Select Analysis Plane Location'); drawnow;
 
-else
-    %Load in pcvipr data from scratch
-    [nframes,matrix,res,timeres,VENC,area_val,diam_val,flowPerHeartCycle_val, ...
+else %Load in pcvipr data from scratch
+    if exist([directory filesep 'Flow.h5'],'file')
+        [nframes,matrix,res,timeres,VENC,area_val,diam_val,flowPerHeartCycle_val, ...
         maxVel_val,PI_val,RI_val,flowPulsatile_val,velMean_val, ...
         VplanesAllx,VplanesAlly,VplanesAllz,Planes,branchList,segment,r, ...
         timeMIPcrossection,segmentFull,vTimeFrameave,MAGcrossection, imageData, ...
         bnumMeanFlow,bnumStdvFlow,StdvFromMean] ...  
         = loadpcvipr(directory,handles); 
         %= loadHDF5_py(directory, handles);       
-        %= loadHDF5_py(directory, handles);
     
     directory = uigetdir; %select saving dir 
     % Save all variables needed to run parametertool. This will be used
@@ -238,16 +238,6 @@ else
         'Mean Flow ml/s','Pulsatility Index','Branch Label'});
     xlwrite([SavePath filesep 'SummaryParamTool.xls'],col_header,'Summary_Centerline','A1');
     xlwrite([SavePath filesep 'SummaryParamTool.xls'],get(handles.NamePoint,'String'),'Summary_Centerline','A2');
-    
-    % export gating stats 
-    gating_stats = {'Median RR (ms)'; 'HR (bpm)';'Values within expected RR (%)'};
-    val = [imageData.gating_rr, imageData.gating_hr, imageData.gating_var]';
-    gating_table = table(gating_stats,val);
-    writetable(gating_table,[SavePath filesep 'gating_stats.csv'],'Delimiter',',');
-    
-    set(handles.TextUpdate,'String','Data Successfully Saved'); drawnow;
-    pause(0.5)
-    set(handles.TextUpdate,'String','Please Select Analysis Plane Location'); drawnow;
 end
 
 %%% Plotting 3D Interactive Display
@@ -257,7 +247,7 @@ set(handles.AreaThreshSlide, 'Value',0);
 
 % Initialize visualization
 fig = figure(1); cla
-set(fig,'Position',[2325 57 1508 1047]); %WORK
+%set(fig,'Position',[2325 57 1508 1047]); %WORK
 %set(fig,'Position',[1856 37 1416 954]); %HOME
 
 hpatch = patch(isosurface(permute(segment,[2 1 3]),0.5),'FaceAlpha',0); %bw iso angiogram
@@ -520,12 +510,105 @@ contents = cellstr(get(hObject,'String'));
 PointLabel = contents{get(hObject,'Value')};
 
 
+% --- Executes on button press in manualSeg.
+function manualSeg_Callback(hObject, eventdata, handles)
+global dcm_obj branchList timeMIPcrossection segmentFull SavePath caseFilePath
+global area_val flowPerHeartCycle_val maxVel_val r res nframes
+global flowPulsatile_val PI_val RI_val velMean_val 
+global VplanesAllx VplanesAlly VplanesAllz PointLabel
+% global bnumStdvFlow bnumMeanFlow StdvFromMean diam_val 
+
+
+info_struct = getCursorInfo(dcm_obj);
+ptList = [info_struct.Position];
+ptList = reshape(ptList,[3,numel(ptList)/3])';
+pindex = zeros(size(ptList,1),1);
+
+for n = 1:size(ptList,1)
+    xIdx = find(branchList(:,1) == ptList(n,1));
+    yIdx = find(branchList(xIdx,2) == ptList(n,2));
+    zIdx = find(branchList(xIdx(yIdx),3) == ptList(n,3));
+    pindex(n) = xIdx(yIdx(zIdx));
+end
+
+% Gives associated branch number if full branch point is wanted
+bnum = branchList(pindex,4);
+Logical_branch = branchList(:,4) ~= bnum;
+
+% OUTPUT +/- points use this
+index_range = pindex-2:pindex+2;
+
+%removes outliers and points from other branches
+index_range(index_range<1) = [];
+index_range(index_range>size(branchList,1)) = [];
+index_range(Logical_branch(index_range)) = [];
+
+imdim = sqrt(size(segmentFull,2));
+%reshape(Maskcross,imdim,imdim);
+for q = 1:length(index_range)
+    INDEX = index_range(q);
+    cdSlice = timeMIPcrossection(INDEX,:);
+    CDcross = reshape(cdSlice,imdim,imdim)./max(cdSlice);
+    fh = figure; imshow(CDcross,[]);
+    fh.WindowState = 'maximized';
+
+    %shape = drawcircle('FaceAlpha',0.15,'LineWidth',1); %create freehand ROI
+    shape = drawpolygon(fh.CurrentAxes);
+    roiMask = createMask(shape);
+    
+    oldMask = reshape(segmentFull(INDEX,:),[81 81]);
+    InterpVals = 4; %choose the interpolation between points
+    dArea = (res/10)^2; %pixel size (cm^2)
+    area = sum(roiMask(:))*dArea*((2*r+1)/(2*r*InterpVals+1))^2;
+    for n=1:nframes
+        v1 = squeeze(VplanesAllx(INDEX,:,n));
+        v2 = squeeze(VplanesAlly(INDEX,:,n));
+        v3 = squeeze(VplanesAllz(INDEX,:,n));
+        v1 = reshape(v1,[(2*r)+1 (2*r)+1]);
+        v2 = reshape(v2,[(2*r)+1 (2*r)+1]);
+        v3 = reshape(v3,[(2*r)+1 (2*r)+1]);
+        v1 = imresize(v1,[imdim imdim]);
+        v2 = imresize(v2,[imdim imdim]);
+        v3 = imresize(v3,[imdim imdim]);
+
+        vTimeFrame = roiMask(:).*0.1.*(v1(:) + v2(:) + v3(:)); %masked velocity (cm/s)
+        vTimeFramerowMean = sum(vTimeFrame) ./ sum(vTimeFrame~=0); %mean vel
+        flowPulsatile_val(INDEX,n) = vTimeFramerowMean.*area; %TR flow (ml/s)
+        maxVelFrame(n) = max(vTimeFrame); %max vel. each frame (cm/s)
+        velPulsatile_val(n) = vTimeFramerowMean;%mean vel. each frame (cm/s) 
+    end 
+    maxVel_val(INDEX) = max(maxVelFrame); %max in-plane veloc. for all frames
+    flowPerHeartCycle_val(INDEX) = sum(flowPulsatile_val(INDEX,:),2)./(nframes); %TA flow (ml/s)
+    velMean_val(INDEX) = sum(velPulsatile_val)./(nframes); %TA in-plane velocities
+    segmentFull(INDEX,:) = roiMask(:);
+    area_val(INDEX,1) = area;
+
+    PI_val(INDEX) = abs( max(flowPulsatile_val(INDEX,:)) - min(flowPulsatile_val(INDEX,:)) )./mean(flowPulsatile_val(INDEX,:));
+    RI_val(INDEX) = abs( max(flowPulsatile_val(INDEX,:)) - min(flowPulsatile_val(INDEX,:)) )./max(flowPulsatile_val(INDEX,:));
+    
+    segName = regexprep(PointLabel, ' ', '_');
+    segName = [segName '_' num2str(INDEX)];
+    segFolder = [SavePath filesep 'manual_seg'];
+    if ~exist(segFolder)
+        mkdir(segFolder);
+    end 
+    segPath = fullfile(segFolder,[segName '.mat']);
+    save(segPath,'roiMask')
+    fseg = figure; montage({CDcross, oldMask, CDcross, roiMask})
+    imagePath = fullfile(segFolder,[segName '.png']);
+    saveas(fseg,imagePath);
+    close(fseg);
+    close(fh)
+end 
+SavePoint_Callback(hObject, eventdata, handles);
+parameter_choice_Callback(hObject, eventdata, handles);
+set(dcm_obj,'UpdateFcn',@myupdatefcn_all); %update dataCursor w/ cust. fcn
+
 % --- Executes on button press in SavePoint.
 function SavePoint_Callback(hObject, eventdata, handles)
 global PointLabel nframes VENC timeres branchList timeMIPcrossection area_val
 global flowPerHeartCycle_val PI_val diam_val maxVel_val RI_val flowPulsatile_val
 global vTimeFrameave velMean_val dcm_obj fig segmentFull SavePath MAGcrossection
-
 global vesselsAnalyzed allNotes
 
 vesselsAnalyzed{end+1} = PointLabel;
@@ -1063,3 +1146,4 @@ function ParameterTool_CloseRequestFcn(hObject, eventdata, handles)
 
 % Hint: delete(hObject) closes the figure
 delete(hObject);
+

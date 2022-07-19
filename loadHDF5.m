@@ -6,7 +6,7 @@ function [nframes,matrix,res,timeres,VENC,area_val,diam_val,flowPerHeartCycle_va
 %LOADHDF5: loadhdf5 reads in PCVIPR data saved in h5
 %   Used by: paramMap.m
 %   Dependencies: background_phase_correction.m, evaluate_poly.m, calc_angio.m,
-%   feature_extraction.m, paramMap_params_new.m, makeITPlane.m, slidingThreshold.m
+%   feature_extraction.m, paramMap_params_new.m, slidingThreshold.m
 
 %% Read HDF5
 filetype = 'hdf5';
@@ -154,21 +154,6 @@ timeMIP = calc_angio(MAG, vMean, VENC);
 % NOTE: timeMIP is an approximated complex difference image.
 % The result is nearly equivalent to loading 'CD.dat'.
 
-%%%% OPTION FOR ANGIOGRAM %%%%%
-% CD = CD(IDXstart(1):IDXend(1),IDXstart(2):IDXend(2),IDXstart(3):IDXend(3));
-% angio = max(MAG(:))./max(CD(:))*CD - MAG;
-% v = sqrt(vx.^2 + vy.^2 + vz.^2);
-% v = v(IDXstart(1):IDXend(1),IDXstart(2):IDXend(2),IDXstart(3):IDXend(3));
-% SDv = std(v,0,4);
-% threshed = adaptthresh(SDv);
-% SDvBW = imcomplement(imbinarize(threshed));
-% SE = strel('sphere',3);
-% SDvBW = imdilate(SDvBW,SE);
-% timeMIP = angio.*SDvBW;
-% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% timeMIP = timeMIP(IDXstart(1):IDXend(1),IDXstart(2):IDXend(2),IDXstart(3):IDXend(3));
-% clear vx vy vz v angio v SDv threshed SDvBW SE
-
 %% Find optimum global threshold 
 step = 0.001; %step size for sliding threshold
 UPthresh = 0.8; %max upper threshold when creating Sval curvature plot
@@ -185,11 +170,13 @@ clear curvatureSM denom num ddy dy ddx dx areaThresh fullWidth conn
 clear Sval iter maxThresh newDIM dataArray fid formatSpec delimiter
 clear SUMnumA SUMnumC SUMnumS SUMnum step ans dataHeader UPthresh shiftHM_flag
 
+% save raw (cropped) images to imageData structure (for Visual Tool)
 imageData.MAG = MAG;
 imageData.CD = timeMIP; 
 imageData.V = vMean;
 imageData.Segmented = segment;
 imageData.pcviprHeader = pcviprHeader;
+
 
 
 %% Feature Extraction
@@ -204,6 +191,14 @@ spurLength = 15; %minimum branch length (removes short spurs)
     vTimeFrameave,MAGcrossection,bnumMeanFlow,bnumStdvFlow,StdvFromMean,Planes] ...
     = paramMap_params_kmeans(filetype,branchList,matrix,timeMIP,vMean,back, ...
     BGPCdone,directory,nframes,res,MAG,IDXstart,IDXend,handles);
+
+%%% SLIDING THRESHOLD %%%
+% [area_val,diam_val,flowPerHeartCycle_val,maxVel_val,PI_val,RI_val, ...
+% flowPulsatile_val,velMean_val,VplanesAllx,VplanesAlly,VplanesAllz, ...
+% r,timeMIPcrossection,segmentFull,vTimeFrameave,MAGcrossection, ...
+% bnumMeanFlow,bnumStdvFlow,StdvFromMean,Planes] ...
+%     = paramMap_params_new(filetype,branchList,matrix,timeMIP,vMean,...
+% back,BGPCdone,directory,nframes,res,MAG,IDXstart,IDXend,handles);
 
 set(handles.TextUpdate,'String','All Data Loaded'); drawnow;
 
