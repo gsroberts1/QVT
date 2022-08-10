@@ -246,6 +246,7 @@ else %Load in pcvipr data from scratch
         'Mean Flow ml/s','Pulsatility Index','Branch Label'});
     xlwrite([SavePath filesep 'SummaryParamTool.xls'],col_header,'Summary_Centerline','A1');
     xlwrite([SavePath filesep 'SummaryParamTool.xls'],get(handles.NamePoint,'String'),'Summary_Centerline','A2');
+    set(handles.TextUpdate,'String','Please Select Analysis Plane Location'); drawnow;
 end
 
 %%% Plotting 3D Interactive Display
