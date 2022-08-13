@@ -1,4 +1,4 @@
-MATLAB-package
+Quantitative Velocity Tool (QVT) - MATLAB
 =========
 
 **Current Maintainer: Grant S. Roberts** \
@@ -47,9 +47,10 @@ Download or clone the 'QVT' repository into the directory of your choice (e.g., 
 2. `>> addpath(genpath('C:\Users\username\Documents\MATALB\QVT'))`
 
 ### Dependencies ###
-Machine Learning Toolbox \
-Optimization Toolbox \
-Image Processing Toolbox
+**Required Matlab Add-Ons** \
+Image Processing Toolbox (for medfilt3)
+Curve Fitting Toolbox (for csaps) \
+Statistics and Machine Learning Toolbox (for kmeans)
 
 
 ## Usage ##
@@ -68,6 +69,6 @@ In the near future, we plan to implement functions to load more universal 4D flo
 
 ## Additional Resources ##
 
-[Video Demo](https://mediaspace.wisc.edu/)
+[Video Demo](https://mediaspace.wisc.edu/media/t/1_1qs6bhfe)
 
 Please contact us with any issues and we will address them as quickly as we can.
