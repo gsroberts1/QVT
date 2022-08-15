@@ -42,9 +42,8 @@ One of the most unique features of this tool is the 3D vessel selection window, 
 ## Installation ##
 Requires MATLAB version > 2018
 
-Download or clone the 'QVT' repository into the directory of your choice (e.g., 'C:\Users\username\Documents\MATALB'). From MATLAB, add the 'QVT' folder to your Matlab search path. This can be done several ways:
-1. Move to the directory containing the 'QVT' folder, right click on 'QVT', select "Add to Path --> Selected Folders and Subfolders". 
-2. `>> addpath(genpath('C:\Users\username\Documents\MATALB\QVT'))`
+Clone the 'QVT' repository into the directory of your choice (e.g., 'C:\Users\username\Documents\MATALB') with Git Bash or GitHub CLI:
+`git clone https://github.com/uwmri/QVT.git`
 
 ### Dependencies ###
 **Required Matlab Add-Ons** \
@@ -54,6 +53,10 @@ Statistics and Machine Learning Toolbox (for kmeans)
 
 
 ## Usage ##
+After downloading or clone the 'QVT' repository, add the 'QVT' folder to your Matlab search path. This can be done several ways:
+1. Move to the directory containing the 'QVT' folder, right click on 'QVT', select "Add to Path --> Selected Folders and Subfolders". 
+2. `>> addpath(genpath('C:\Users\username\Documents\MATALB\QVT'))`
+
 (Optional) In Matlab, change to the directory where the 4D flow data exists. This is not necessary but is convenient for locating 4D flow data.
 
 From the command window, type the following command to open the GUI:
