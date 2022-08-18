@@ -1,7 +1,7 @@
 Quantitative Velocity Tool (QVT) - MATLAB
 =========
 
-**Current Maintainer: Grant S. Roberts** \
+**Current Maintainers: Grant S. Roberts and Leonardo Rivera-Rivera** \
 Previous Maintainer: Carson A. Hoffman
 
 
@@ -18,7 +18,7 @@ BSD 2-Clause
 ## Introduction ##
 4D flow MRI is a time-resolved, 3D phase contrast imaging technique that allows for non-invasive acquisitions of velocity vector fields, allowing for the measurement blood velocities within an imaging volume. By obtaining blood velocities, we can calculate blood flow and other hemodynamic parameters which have been used to diagnose and characterize a wide range of intracranial diseases, such as aneurysms, arteriovenous malformations, and even vascular dementia. Despite advances in 4D Flow MRI acquisition and reconstruction, efficient and repeatable post-processing for cranial 4D flow MRI datasets is still quite challenging. The high dimensionality of the reconstructed datasets (1 temporal, 3 spatial dimensions, and 3 velocity directions) and the complexity of the brain vasculature can lead to long post-processing times. Typical processing steps usually require manual segmentation and manual placement of double-oblique cut-planes for hemodynamic analysis, approaches that limit reproducibility and are impractical when analyzing many vessels over a large number of datasets. 
 
-To address this issue, our group developed a semi-automated post-processing tool that automated vessel segmentation, vessel centerline generation, placement of tangential cut-planes, and flow assessment. This work started in 2015 with Eric Schrauben (alumni of Oliver Wieben Lab) in collaboration with the Umea University 4D flow group. More recently in 2018, Carson Hoffman and Grant Roberts made substantial updates to the tool, improving visualization and overall usability of the tool. 
+To address this issue, our group developed a semi-automated post-processing tool that automated vessel segmentation, vessel centerline generation, placement of tangential cut-planes, and flow assessment. This work started in 2015 with Eric Schrauben (alumni of Oliver Wieben Lab) in collaboration with the Umea University 4D flow group. More recently in 2018, Carson Hoffman, Grant Roberts, and Leonardo Rivera made substantial updates to the tool, improving visualization and overall usability of the tool. 
 
 The QVT (Quantitative Velocity Tool) user interface that we developed is designed to load in reconstructed 4D flow MRI data and perform the following steps automatically:
 
